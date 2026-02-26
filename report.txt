@@ -1,0 +1,729 @@
+================================================================================
+          FULL TECHNICAL REPORT - COURS MICROSERVICE (NiNoLingo Platform)
+================================================================================
+Generated: February 2026
+Audience: Frontend Engineering Team
+================================================================================
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+1.1 Microservice Name: "cours"
+Part of the NiNoLingo/MinoLingo language-learning platform.
+
+1.2 High-Level Architecture
+Spring Boot 4.0.2 on Java 17. Classic layered architecture:
+- Controller Layer: REST endpoints, base path /api/cours
+- Service Layer: Interfaces + implementations for business logic
+- Repository Layer: Spring Data JPA repositories
+- Entity Layer: JPA entities mapped to PostgreSQL
+
+Registers with Netflix Eureka for service discovery. App name: "cours". Port: 8086.
+
+1.3 Dependencies
+- spring-boot-starter-data-jpa: JPA/Hibernate for DB access
+- spring-boot-starter-webmvc: Spring MVC, embedded Tomcat, REST
+- spring-cloud-starter-netflix-eureka-client: Eureka service discovery (Spring Cloud 2025.1.0)
+- postgresql: PostgreSQL JDBC driver
+- lombok: Boilerplate reduction (getters, setters, builders)
+- NO Spring Security dependency -- no auth at microservice level
+
+1.4 External Integrations
+- Eureka Service Discovery (service name "cours")
+- PostgreSQL database "cours" on localhost:5432
+- File system storage at /var/www/uploads, public URL: https://minolingo.online/uploads/
+- Mail config present (ssl0.ovh.net:587) but NOT used in code
+- Frontend URL: https://minolingo.online
+
+
+================================================================================
+2. PROJECT STRUCTURE
+================================================================================
+
+tn.esprit.cours/
+  CoursApplication.java                    -- Main entry point (@SpringBootApplication)
+  controller/
+    CertificationController.java
+    ContenuPedagogiqueController.java
+    CoursController.java
+    FileController.java
+    PracticeItemController.java
+    QuestionQuizController.java
+    QuizCardController.java
+    QuizCategoryController.java
+    QuizController.java
+    SessionController.java
+  entity/
+    Certification.java, CertificationStatus.java
+    ContentFile.java, ContenuPedagogique.java
+    Cours.java, CourseProgress.java
+    PracticeItem.java
+    QuestionQuiz.java, QuestionType.java
+    Quiz.java, QuizCard.java, QuizCardStatus.java
+    QuizCategory.java, QuizLevel.java, QuizStatus.java
+    Session.java, SessionStatus.java
+  repository/
+    CertificationRepository.java, ContenuPedagogiqueRepository.java
+    CoursRepository.java, PracticeItemRepository.java
+    QuestionQuizRepository.java, QuizCardRepository.java
+    QuizCategoryRepository.java, QuizRepository.java, SessionRepository.java
+  services/
+    ICertificationService.java, CertificationServiceImpl.java
+    IContenuPedagogiqueService.java, ContenuPedagogiqueServiceImpl.java
+    ICoursService.java, CoursServiceImpl.java
+    FileStorageService.java
+    IPracticeItemService.java, PracticeItemServiceImpl.java
+    IQuestionQuizService.java, QuestionQuizServiceImpl.java
+    IQuizCardService.java, QuizCardServiceImpl.java
+    IQuizCategoryService.java, QuizCategoryServiceImpl.java
+    IQuizService.java, QuizServiceImpl.java
+    ISessionService.java, SessionServiceImpl.java
+
+Layer Responsibilities:
+- CONTROLLERS: Thin REST layer. @RestController + @RequestMapping("/api/cours"). Delegate to services. No validation or business logic.
+- SERVICES: Interface + Impl pattern. CRUD ops, field-by-field updates, RuntimeException on not found.
+- REPOSITORIES: JpaRepository<Entity, Long>. Some have custom JPQL to avoid N+1 problems.
+- ENTITIES: JPA entities with Lombok. Jackson annotations for bidirectional relationship handling.
+- NO config package, NO exception handling package, NO utils package.
+
+
+================================================================================
+3. DATABASE MODEL ANALYSIS
+================================================================================
+
+Database: PostgreSQL, name "cours". Hibernate ddl-auto=update.
+
+------------ 3.1 Cours (table: "cours") ------------
+- id (Long): PK, auto-generated IDENTITY
+- idProfessor (Long, column "idprofessor"): Reference to professor in User microservice. Nullable.
+- title (String, column "title"): Course title, max 255 chars. Nullable.
+- description (String, column "description"): Max 1000 chars. Nullable.
+- content (String, column "content"): Max 5000 chars. Main textual content. Nullable.
+- image (ContentFile): @OneToOne, cascade=ALL, fetch=LAZY, join column "image_id". One image per course.
+- contenus (List<ContenuPedagogique>): @OneToMany, mappedBy="cours", cascade=ALL, orphanRemoval=true, @JsonManagedReference
+
+Example row: id=1, idprofessor=42, title="French Basics A1", description="Intro to French", content="...", image_id=5
+
+------------ 3.2 ContenuPedagogique (table: "contenu_pedagogique") ------------
+- idContent (Long): PK, auto-generated IDENTITY
+- titleC (String, column "titlec"): Content title, max 255 chars. Nullable.
+- duration (Integer, column "duration"): Duration in minutes. Nullable.
+- contentType (String, column "contenttype"): Type like "video","text","pdf". Nullable.
+- files (List<ContentFile>): @OneToMany, mappedBy="contenu", cascade=ALL, orphanRemoval=true
+- cours (Cours): @ManyToOne, fetch=LAZY, join column "cours_id", @JsonBackReference
+
+Example row: id_content=10, titlec="Lesson 1 - Greetings", duration=30, contenttype="video", cours_id=1
+
+------------ 3.3 ContentFile (table: "content_files") ------------
+- id (Long): PK, auto-generated IDENTITY
+- fileName (String): Stored file name, e.g. "1708123456789_lesson1.pdf". Nullable.
+- fileUrl (String): Full public URL, e.g. "https://minolingo.online/uploads/...". Nullable.
+- fileType (String): "image", "video", "pdf", "doc", etc. Nullable.
+- fileSize (Long): Size in bytes. Nullable.
+- contenu (ContenuPedagogique): @ManyToOne, fetch=LAZY, join column "content_id"
+
+Also used as @OneToOne target from Cours.image (in that case contenu is null).
+
+------------ 3.4 Quiz (table: "quizzes") ------------
+- id (Long): PK, auto-generated IDENTITY
+- title (String): Quiz title, max 255 chars. Nullable.
+- description (String): Max 1000 chars. Nullable.
+- level (QuizLevel enum): BEGINNER, INTERMEDIATE, ADVANCED. Stored as STRING. Nullable.
+- dateStart (LocalDate): Start date, format "YYYY-MM-DD". Nullable.
+- dateEnd (LocalDate): End date, format "YYYY-MM-DD". Nullable.
+- status (QuizStatus enum): DRAFT, OPEN, CLOSED. Stored as STRING. Nullable.
+- courseId (Long): Loose reference to Cours.id (NOT a FK). Nullable.
+- xpReward (Integer): XP points for completion. Nullable.
+- questions (List<QuestionQuiz>): @OneToMany, mappedBy="quiz", cascade=ALL, orphanRemoval=true, @JsonManagedReference
+
+------------ 3.5 QuestionQuiz (table: "questions_quiz") ------------
+- id (Long): PK, auto-generated IDENTITY
+- quiz (Quiz): @ManyToOne, fetch=LAZY, join column "quiz_id", @JsonBackReference
+- question (String): Max 1000 chars. The question text. Nullable.
+- options (List<String>): @ElementCollection, table "question_options", column "option_text", join column "question_id"
+- correctAnswer (String): The correct answer text. Nullable.
+- explanation (String): Max 1000 chars. Nullable.
+- type (QuestionType enum): MCQ, TRUE_FALSE. Stored as STRING. Nullable.
+
+------------ 3.6 Certification (table: "certifications") ------------
+- id (Long): PK, auto-generated IDENTITY
+- title (String): Cert title. Nullable.
+- subtitle (String): Short description. Nullable.
+- status (CertificationStatus enum): PASSED, ACTIVE, LOCKED. Nullable.
+- progress (String): e.g. "75%". Nullable.
+- date (String): Date as string. Nullable.
+- estimatedExam (String): e.g. "March 2026". Nullable.
+- icon (String): Icon URL or name. Nullable.
+No relationships. Standalone entity.
+
+------------ 3.7 QuizCard (table: "quiz_cards") ------------
+- id (Long): PK
+- title (String), totalQuestions (Integer), level (String), progress (Integer)
+- status (QuizCardStatus enum): CONTINUE, START, LOCKED
+- icon (String), xpRequired (Integer)
+No relationships. Standalone entity for UI card display.
+
+------------ 3.8 QuizCategory (table: "quiz_categories") ------------
+- id (Long): PK
+- title (String), description (String, max 1000), totalSets (Integer), icon (String)
+No relationships. Standalone entity.
+
+------------ 3.9 Session (table: "sessions") ------------
+- id (Long): PK
+- title (String), level (String)
+- date (LocalDateTime): ISO format "YYYY-MM-DDTHH:MM:SS"
+- time (LocalDateTime): ISO format "YYYY-MM-DDTHH:MM:SS"
+- duration (String): e.g. "45 min"
+- readinessScore (Integer), status (SessionStatus enum): UPCOMING, COMPLETED, MISSED
+- image (String), tip (String, max 1000)
+No relationships. Standalone entity.
+
+------------ 3.10 PracticeItem (table: "practice_items") ------------
+- id (Long): PK
+- title (String), description (String, max 1000), color (String)
+No relationships. Standalone entity.
+
+------------ 3.11 CourseProgress (table: "course_progress") ------------
+- id (Long): PK
+- userId (Long, column "userid"): Reference to User microservice
+- coursId (Long, column "coursid"): Reference to Cours
+- progress (Double): e.g. 0.75 for 75%
+No relationships. NO controller, NO service, NO repository. Entity only (table created by Hibernate). Prepared for future use.
+
+
+================================================================================
+4. ENTITY RELATIONSHIPS DIAGRAM
+================================================================================
+
+Cours (1) ---OneToOne---> (1) ContentFile [image, cascade=ALL]
+Cours (1) ---OneToMany--> (N) ContenuPedagogique [cascade=ALL, orphanRemoval=true]
+ContenuPedagogique (1) ---OneToMany--> (N) ContentFile [cascade=ALL, orphanRemoval=true]
+Quiz (1) ---OneToMany--> (N) QuestionQuiz [cascade=ALL, orphanRemoval=true]
+Quiz.courseId ....loose ref....> Cours.id (no FK constraint)
+CourseProgress.userId ....loose ref....> User (other microservice)
+CourseProgress.coursId ....loose ref....> Cours.id
+
+Standalone (no relationships): Certification, QuizCard, QuizCategory, Session, PracticeItem
+
+Serialization behavior:
+- Cours JSON includes "contenus" array (@JsonManagedReference)
+- ContenuPedagogique JSON does NOT include "cours" (@JsonBackReference)
+- Quiz JSON includes "questions" array (@JsonManagedReference)
+- QuestionQuiz JSON does NOT include "quiz" (@JsonBackReference)
+
+
+================================================================================
+5. REPOSITORIES
+================================================================================
+
+5.1 CertificationRepository -- JpaRepository<Certification, Long>. No custom queries.
+5.2 ContenuPedagogiqueRepository -- Custom queries:
+  - findByCoursIdWithCours(Long coursId): JPQL JOIN FETCH cp.cours. Eager load cours.
+  - findByCoursId(Long coursId): Derived query. Used by service.
+5.3 CoursRepository -- Custom queries:
+  - findByIdWithContenus(Long id): JPQL LEFT JOIN FETCH c.contenus. Used by getCoursById.
+  - findAllWithContenus(): JPQL SELECT DISTINCT + LEFT JOIN FETCH. Used by getAllCours.
+  - findAllPaged(Pageable): Paginated, no children. NOT currently used.
+5.4 PracticeItemRepository -- No custom queries.
+5.5 QuestionQuizRepository -- Custom queries:
+  - findByQuizIdWithQuiz(Long quizId): JPQL JOIN FETCH q.quiz. NOT used by service.
+  - findByQuizId(Long quizId): Derived query. Used by service.
+  - findByIdWithQuiz(Long id): JPQL JOIN FETCH. NOT used by service.
+5.6 QuizCardRepository -- No custom queries.
+5.7 QuizCategoryRepository -- No custom queries.
+5.8 QuizRepository -- Custom queries:
+  - findByIdWithQuestions(Long id): JPQL LEFT JOIN FETCH q.questions. Used by getQuizById.
+  - findAllWithQuestions(): JPQL SELECT DISTINCT + LEFT JOIN FETCH. Used by getAllQuizzes.
+  - findAllPaged(Pageable): Paginated, no children. NOT currently used.
+5.9 SessionRepository -- No custom queries.
+
+
+================================================================================
+6. SERVICES
+================================================================================
+
+All services follow the same pattern: Interface + Impl. All use @Service + @RequiredArgsConstructor. All throw RuntimeException("{Entity} not found with id: X") when not found.
+
+6.1 CoursServiceImpl
+- createCours: Saves course. Cascades contenus and image if provided.
+- getCoursById: Uses findByIdWithContenus (eager load children).
+- getAllCours: Uses findAllWithContenus (eager load all).
+- updateCours: Updates ONLY title, description, content. Does NOT update idProfessor, image, contenus.
+- deleteCours: Cascades delete to all contenus and files.
+
+6.2 ContenuPedagogiqueServiceImpl
+- createContenu: Saves content. Must include cours.id to link.
+- getContenuById: Standard findById.
+- getAllContenus: Standard findAll.
+- getContenusByCoursId: Uses findByCoursId.
+- updateContenu: Updates titleC, duration, contentType, cours. Does NOT update files.
+- deleteContenu: Cascades delete to all files.
+
+6.3 CertificationServiceImpl
+- Standard CRUD. Update replaces ALL fields: title, subtitle, status, progress, date, estimatedExam, icon.
+
+6.4 QuizServiceImpl
+- createQuiz: Saves quiz. Cascades questions if provided.
+- getQuizById: Uses findByIdWithQuestions (eager load).
+- getAllQuizzes: Uses findAllWithQuestions.
+- updateQuiz: Updates title, description, level, dateStart, dateEnd, status, courseId, xpReward. Does NOT update questions.
+- deleteQuiz: Cascades delete to all questions.
+
+6.5 QuestionQuizServiceImpl
+- createQuestion: Must include quiz.id to link.
+- getQuestionsByQuizId: Uses findByQuizId.
+- updateQuestion: Updates question, options, correctAnswer, explanation, type, quiz.
+- deleteQuestion: Standard.
+
+6.6 QuizCardServiceImpl -- Standard CRUD. Updates all fields.
+6.7 QuizCategoryServiceImpl -- Standard CRUD. Updates title, description, totalSets, icon.
+6.8 SessionServiceImpl -- Standard CRUD. Updates all fields.
+6.9 PracticeItemServiceImpl -- Standard CRUD. Updates title, description, color.
+
+6.10 FileStorageService
+- storeFile(MultipartFile): Generates name "{timestamp}_{originalName}". Stores at /var/www/uploads. Returns filename.
+- Max 500MB. No file type validation. Upload dir must exist.
+
+
+================================================================================
+7. CONTROLLERS (ALL ENDPOINTS FOR FRONTEND)
+================================================================================
+
+ALL controllers: @RestController, @RequestMapping("/api/cours"), @RequiredArgsConstructor
+Server port: 8086. Base URL: http://localhost:8086/api/cours
+
+-------- 7.1 CoursController --------
+
+POST /api/cours/cours/create-cours
+  Body: { "idProfessor": 42, "title": "French A1", "description": "...", "content": "...", "image": { "fileName": "...", "fileUrl": "...", "fileType": "image", "fileSize": 245000 }, "contenus": [ { "titleC": "Lesson 1", "duration": 30, "contentType": "video" } ] }
+  Response: 201, created Cours with ID
+  Note: id auto-generated. image and contenus optional, cascaded if present.
+
+GET /api/cours/cours/get-cours-by-id/{id}
+  Response: 200, Cours with contenus loaded. 500 if not found.
+
+GET /api/cours/cours/get-all-cours
+  Response: 200, array of all Cours with contenus.
+
+PUT /api/cours/cours/update-cours/{id}
+  Body: { "title": "...", "description": "...", "content": "..." }
+  Response: 200. ONLY updates title, description, content. 500 if not found.
+
+DELETE /api/cours/cours/delete-cours/{id}
+  Response: 204 No Content. Cascades delete. 500 if not found.
+
+-------- 7.2 ContenuPedagogiqueController --------
+
+POST /api/cours/contenus/create-contenu
+  Body: { "titleC": "Lesson 2", "duration": 25, "contentType": "text", "cours": { "id": 1 } }
+  Response: 201. Note: cours field NOT in response (@JsonBackReference).
+
+GET /api/cours/contenus/get-contenu-by-id/{id}
+  Response: 200.
+
+GET /api/cours/contenus/get-all-contenus
+  Response: 200, array.
+
+GET /api/cours/contenus/get-contenus-by-cours-id/{coursId}
+  Response: 200, array of contenus for given course.
+
+PUT /api/cours/contenus/update-contenu/{id}
+  Body: { "titleC": "...", "duration": 40, "contentType": "video", "cours": { "id": 1 } }
+  Response: 200. Updates titleC, duration, contentType, cours.
+
+DELETE /api/cours/contenus/delete-contenu/{id}
+  Response: 204.
+
+-------- 7.3 CertificationController --------
+
+POST /api/cours/certifications/create-certification
+  Body: { "title": "French A1 Cert", "subtitle": "Basic Proficiency", "status": "ACTIVE", "progress": "75%", "date": "2026-01-15", "estimatedExam": "March 2026", "icon": "cert_icon.png" }
+  Response: 201. Status values: "PASSED", "ACTIVE", "LOCKED"
+
+GET /api/cours/certifications/get-certification-by-id/{id} -- 200
+GET /api/cours/certifications/get-all-certifications -- 200, array
+PUT /api/cours/certifications/update-certification/{id} -- 200, updates ALL fields
+DELETE /api/cours/certifications/delete-certification/{id} -- 204
+
+-------- 7.4 QuizController --------
+
+POST /api/cours/quizzes/create-quiz
+  Body: { "title": "Vocab Quiz", "description": "...", "level": "BEGINNER", "dateStart": "2026-01-15", "dateEnd": "2026-03-15", "status": "OPEN", "courseId": 1, "xpReward": 100, "questions": [ { "question": "What is hello in French?", "options": ["Bonjour","Au revoir","Merci","Oui"], "correctAnswer": "Bonjour", "explanation": "Bonjour means hello", "type": "MCQ" } ] }
+  Response: 201. Questions cascaded. level: BEGINNER|INTERMEDIATE|ADVANCED. status: DRAFT|OPEN|CLOSED. Dates: YYYY-MM-DD.
+
+GET /api/cours/quizzes/get-quiz-by-id/{id} -- 200, includes questions
+GET /api/cours/quizzes/get-all-quizzes -- 200, array with questions
+PUT /api/cours/quizzes/update-quiz/{id}
+  Body: { "title": "...", "description": "...", "level": "INTERMEDIATE", "dateStart": "...", "dateEnd": "...", "status": "CLOSED", "courseId": 2, "xpReward": 150 }
+  Response: 200. Does NOT update questions.
+DELETE /api/cours/quizzes/delete-quiz/{id} -- 204, cascades delete questions
+
+-------- 7.5 QuestionQuizController --------
+
+POST /api/cours/questions/create-question
+  Body: { "quiz": { "id": 1 }, "question": "What does 'au revoir' mean?", "options": ["Hello","Goodbye","Thanks","Please"], "correctAnswer": "Goodbye", "explanation": "Au revoir = goodbye", "type": "MCQ" }
+  Response: 201. quiz NOT in response. type: "MCQ"|"TRUE_FALSE"
+
+GET /api/cours/questions/get-question-by-id/{id} -- 200
+GET /api/cours/questions/get-all-questions -- 200, array
+GET /api/cours/questions/get-questions-by-quiz-id/{quizId} -- 200, array
+PUT /api/cours/questions/update-question/{id} -- 200, updates all fields
+DELETE /api/cours/questions/delete-question/{id} -- 204
+
+-------- 7.6 QuizCardController --------
+
+POST /api/cours/quiz-cards/create-quiz-card
+  Body: { "title": "Basic Greetings", "totalQuestions": 10, "level": "Beginner", "progress": 0, "status": "START", "icon": "icon.png", "xpRequired": 50 }
+  Response: 201. Status: "CONTINUE"|"START"|"LOCKED"
+
+GET /api/cours/quiz-cards/get-quiz-card-by-id/{id} -- 200
+GET /api/cours/quiz-cards/get-all-quiz-cards -- 200
+PUT /api/cours/quiz-cards/update-quiz-card/{id} -- 200, all fields
+DELETE /api/cours/quiz-cards/delete-quiz-card/{id} -- 204
+
+-------- 7.7 QuizCategoryController --------
+
+POST /api/cours/quiz-categories/create-quiz-category
+  Body: { "title": "Grammar", "description": "Grammar quizzes", "totalSets": 5, "icon": "grammar.png" }
+  Response: 201.
+
+GET /api/cours/quiz-categories/get-quiz-category-by-id/{id} -- 200
+GET /api/cours/quiz-categories/get-all-quiz-categories -- 200
+PUT /api/cours/quiz-categories/update-quiz-category/{id} -- 200
+DELETE /api/cours/quiz-categories/delete-quiz-category/{id} -- 204
+
+-------- 7.8 SessionController --------
+
+POST /api/cours/sessions/create-session
+  Body: { "title": "Speaking Practice", "level": "Intermediate", "date": "2026-03-01T10:00:00", "time": "2026-03-01T10:00:00", "duration": "45 min", "readinessScore": 80, "status": "UPCOMING", "image": "session.jpg", "tip": "Practice phrases first" }
+  Response: 201. date/time: ISO "YYYY-MM-DDTHH:MM:SS". Status: "UPCOMING"|"COMPLETED"|"MISSED"
+
+GET /api/cours/sessions/get-session-by-id/{id} -- 200
+GET /api/cours/sessions/get-all-sessions -- 200
+PUT /api/cours/sessions/update-session/{id} -- 200, all fields
+DELETE /api/cours/sessions/delete-session/{id} -- 204
+
+-------- 7.9 PracticeItemController --------
+
+POST /api/cours/practice-items/create-practice-item
+  Body: { "title": "Pronunciation Drill", "description": "Practice 50 common words", "color": "#4CAF50" }
+  Response: 201.
+
+GET /api/cours/practice-items/get-practice-item-by-id/{id} -- 200
+GET /api/cours/practice-items/get-all-practice-items -- 200
+PUT /api/cours/practice-items/update-practice-item/{id} -- 200
+DELETE /api/cours/practice-items/delete-practice-item/{id} -- 204
+
+-------- 7.10 FileController --------
+
+POST /api/cours/file/upload
+  Content-Type: multipart/form-data
+  Field name: "file"
+  Max size: 500MB
+  Success: 200, body is plain text URL string: "https://minolingo.online/uploads/1708123456789_file.pdf"
+  Error: 400, body: "Upload failed"
+
+  Frontend example:
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    const response = await fetch('/api/cours/file/upload', { method: 'POST', body: formData });
+    const fileUrl = await response.text();
+
+
+================================================================================
+8. FILE UPLOAD
+================================================================================
+
+- Storage location: /var/www/uploads (server file system)
+- Name generation: {System.currentTimeMillis()}_{originalFileName}
+- URL generation: "https://minolingo.online/uploads/" + generatedFileName
+- Access: PUBLIC. No auth on uploaded files. Served by reverse proxy (Nginx).
+- Frontend sends: multipart/form-data, field "file", max 500MB
+- Response: plain text URL string (NOT JSON)
+- No file type validation. Any file accepted.
+- Upload dir must exist and be writable.
+
+Typical workflow:
+  1. Upload file via POST /api/cours/file/upload
+  2. Get URL from response
+  3. Use URL in entity creation (e.g., image.fileUrl in Cours, or image field in Session)
+
+
+================================================================================
+9. SECURITY
+================================================================================
+
+- JWT: NO
+- Role-based access: NO
+- Authentication: NONE at microservice level
+- All 46 endpoints are completely open
+- Security is handled at API gateway level
+- CORS: Not configured in this microservice
+- Authorization header: Not required by this microservice
+
+
+================================================================================
+10. VALIDATION RULES
+================================================================================
+
+- NO Jakarta Validation annotations (@NotNull, @NotBlank, etc.) on ANY field
+- All fields are OPTIONAL -- backend accepts empty objects {}
+- Column size limits enforced by database:
+    255 chars: most String fields (default)
+    1000 chars: description fields, question, explanation, tip
+    5000 chars: Cours.content
+  Exceeding these causes 500 error.
+- File upload: max 500MB, no type restrictions
+- Enum fields: MUST be exact string match (case-sensitive). Invalid values cause 400 error.
+  Valid enums:
+    CertificationStatus: "PASSED", "ACTIVE", "LOCKED"
+    QuizCardStatus: "CONTINUE", "START", "LOCKED"
+    QuizLevel: "BEGINNER", "INTERMEDIATE", "ADVANCED"
+    QuizStatus: "DRAFT", "OPEN", "CLOSED"
+    QuestionType: "MCQ", "TRUE_FALSE"
+    SessionStatus: "UPCOMING", "COMPLETED", "MISSED"
+
+
+================================================================================
+11. ERROR HANDLING
+================================================================================
+
+- NO global exception handler (@ControllerAdvice)
+- NO custom exception classes
+- All not-found cases throw RuntimeException
+
+Error response format (Spring Boot default):
+  {
+    "timestamp": "2026-02-24T17:00:00.000+00:00",
+    "status": 500,
+    "error": "Internal Server Error",
+    "message": "Cours not found with id: 99",
+    "path": "/api/cours/cours/get-cours-by-id/99"
+  }
+
+Common error scenarios:
+- Entity not found: 500 with message "{Entity} not found with id: X"
+- Invalid enum value: 400 (Jackson deserialization error)
+- String exceeding column length: 500 (database error)
+- File upload failure: 400 with plain text "Upload failed"
+- Malformed JSON: 400
+- Path variable type mismatch: 400
+
+
+================================================================================
+12. FRONTEND INTEGRATION GUIDE
+================================================================================
+
+12.1 API Base URL
+  Dev: http://localhost:8086/api/cours
+  Prod: Through API gateway at https://minolingo.online
+
+12.2 All 46 Endpoints
+
+COURSES:
+  POST   /api/cours/cours/create-cours
+  GET    /api/cours/cours/get-cours-by-id/{id}
+  GET    /api/cours/cours/get-all-cours
+  PUT    /api/cours/cours/update-cours/{id}
+  DELETE /api/cours/cours/delete-cours/{id}
+
+PEDAGOGICAL CONTENT:
+  POST   /api/cours/contenus/create-contenu
+  GET    /api/cours/contenus/get-contenu-by-id/{id}
+  GET    /api/cours/contenus/get-all-contenus
+  GET    /api/cours/contenus/get-contenus-by-cours-id/{coursId}
+  PUT    /api/cours/contenus/update-contenu/{id}
+  DELETE /api/cours/contenus/delete-contenu/{id}
+
+CERTIFICATIONS:
+  POST   /api/cours/certifications/create-certification
+  GET    /api/cours/certifications/get-certification-by-id/{id}
+  GET    /api/cours/certifications/get-all-certifications
+  PUT    /api/cours/certifications/update-certification/{id}
+  DELETE /api/cours/certifications/delete-certification/{id}
+
+QUIZZES:
+  POST   /api/cours/quizzes/create-quiz
+  GET    /api/cours/quizzes/get-quiz-by-id/{id}
+  GET    /api/cours/quizzes/get-all-quizzes
+  PUT    /api/cours/quizzes/update-quiz/{id}
+  DELETE /api/cours/quizzes/delete-quiz/{id}
+
+QUIZ QUESTIONS:
+  POST   /api/cours/questions/create-question
+  GET    /api/cours/questions/get-question-by-id/{id}
+  GET    /api/cours/questions/get-all-questions
+  GET    /api/cours/questions/get-questions-by-quiz-id/{quizId}
+  PUT    /api/cours/questions/update-question/{id}
+  DELETE /api/cours/questions/delete-question/{id}
+
+QUIZ CARDS:
+  POST   /api/cours/quiz-cards/create-quiz-card
+  GET    /api/cours/quiz-cards/get-quiz-card-by-id/{id}
+  GET    /api/cours/quiz-cards/get-all-quiz-cards
+  PUT    /api/cours/quiz-cards/update-quiz-card/{id}
+  DELETE /api/cours/quiz-cards/delete-quiz-card/{id}
+
+QUIZ CATEGORIES:
+  POST   /api/cours/quiz-categories/create-quiz-category
+  GET    /api/cours/quiz-categories/get-quiz-category-by-id/{id}
+  GET    /api/cours/quiz-categories/get-all-quiz-categories
+  PUT    /api/cours/quiz-categories/update-quiz-category/{id}
+  DELETE /api/cours/quiz-categories/delete-quiz-category/{id}
+
+SESSIONS:
+  POST   /api/cours/sessions/create-session
+  GET    /api/cours/sessions/get-session-by-id/{id}
+  GET    /api/cours/sessions/get-all-sessions
+  PUT    /api/cours/sessions/update-session/{id}
+  DELETE /api/cours/sessions/delete-session/{id}
+
+PRACTICE ITEMS:
+  POST   /api/cours/practice-items/create-practice-item
+  GET    /api/cours/practice-items/get-practice-item-by-id/{id}
+  GET    /api/cours/practice-items/get-all-practice-items
+  PUT    /api/cours/practice-items/update-practice-item/{id}
+  DELETE /api/cours/practice-items/delete-practice-item/{id}
+
+FILE UPLOAD:
+  POST   /api/cours/file/upload (multipart/form-data)
+
+12.3 Required Request Headers
+  Content-Type: application/json (for all JSON endpoints)
+  Content-Type: multipart/form-data (for file upload -- set automatically by browser)
+  No Authorization header required at microservice level.
+
+12.4 Data Types Expected
+  Long: integer number (e.g., 1, 42)
+  Integer: integer number
+  Double: decimal number (e.g., 0.75)
+  String: text
+  LocalDate: "YYYY-MM-DD" (e.g., "2026-01-15")
+  LocalDateTime: "YYYY-MM-DDTHH:MM:SS" (e.g., "2026-03-01T10:00:00")
+  Enum: exact string match, case-sensitive
+  List<String>: JSON array of strings (e.g., ["A","B","C"])
+
+12.5 Common Mistakes Frontend Must Avoid
+  - Do NOT include "id" in create (POST) requests -- it is auto-generated.
+  - Do NOT set Content-Type header manually for file uploads (browser handles it).
+  - Enum values MUST be uppercase and exact: "BEGINNER" not "beginner" or "Beginner".
+  - LocalDate must be "YYYY-MM-DD", NOT "DD/MM/YYYY" or other formats.
+  - LocalDateTime must include the T separator: "2026-03-01T10:00:00".
+  - When creating ContenuPedagogique or QuestionQuiz, include the parent reference: "cours": {"id": 1} or "quiz": {"id": 1}.
+  - The cours field will NOT appear in ContenuPedagogique GET responses (due to @JsonBackReference).
+  - The quiz field will NOT appear in QuestionQuiz GET responses (due to @JsonBackReference).
+  - File upload response is PLAIN TEXT (not JSON). Use response.text() not response.json().
+  - Update endpoints do NOT update all fields -- check which fields are updated per entity.
+  - Sending a string longer than column max causes 500 error, not a nice validation message.
+  - Not found returns 500 (not 404) because there is no custom exception handler.
+
+
+================================================================================
+13. DATA FLOW EXPLANATIONS
+================================================================================
+
+13.1 When frontend creates a Course with image:
+  Step 1: Frontend uploads image via POST /api/cours/file/upload (multipart).
+  Step 2: Backend stores file, returns URL like "https://minolingo.online/uploads/1708_banner.jpg".
+  Step 3: Frontend sends POST /api/cours/cours/create-cours with body:
+    { "title": "French A1", "description": "...", "content": "...",
+      "image": { "fileName": "banner.jpg", "fileUrl": "https://minolingo.online/uploads/1708_banner.jpg", "fileType": "image", "fileSize": 245000 } }
+  Step 4: CoursController receives request, delegates to CoursServiceImpl.createCours().
+  Step 5: Service calls coursRepository.save(cours).
+  Step 6: Hibernate persists Cours row + ContentFile row (cascade). IDs generated.
+  Step 7: Controller returns 201 with the full Cours object including generated IDs.
+
+13.2 When frontend creates a ContenuPedagogique linked to a Course:
+  Step 1: Frontend already knows the course ID (e.g., 1).
+  Step 2: Frontend sends POST /api/cours/contenus/create-contenu:
+    { "titleC": "Lesson 1", "duration": 30, "contentType": "video", "cours": { "id": 1 } }
+  Step 3: Controller delegates to ContenuPedagogiqueServiceImpl.createContenu().
+  Step 4: Service calls contenuRepository.save(contenu).
+  Step 5: Hibernate persists with cours_id=1. ID generated.
+  Step 6: Controller returns 201. Response does NOT include "cours" field.
+
+13.3 When frontend creates a Quiz with Questions:
+  Step 1: Frontend sends POST /api/cours/quizzes/create-quiz with questions array.
+  Step 2: Controller delegates to QuizServiceImpl.createQuiz().
+  Step 3: Service calls quizRepository.save(quiz).
+  Step 4: Hibernate persists Quiz row + all QuestionQuiz rows (cascade) + all option entries in question_options table.
+  Step 5: Controller returns 201 with full Quiz including all questions with generated IDs.
+
+13.4 When frontend fetches a Course:
+  Step 1: Frontend sends GET /api/cours/cours/get-cours-by-id/1.
+  Step 2: Controller delegates to CoursServiceImpl.getCoursById(1).
+  Step 3: Service calls coursRepository.findByIdWithContenus(1) -- single JPQL query with LEFT JOIN FETCH.
+  Step 4: One SQL query executed. Cours + all ContenuPedagogique loaded.
+  Step 5: If not found, RuntimeException thrown -> 500 response.
+  Step 6: If found, Controller returns 200 with Cours including contenus array.
+
+13.5 When frontend deletes a Quiz:
+  Step 1: Frontend sends DELETE /api/cours/quizzes/delete-quiz/1.
+  Step 2: Service finds quiz by ID (throws 500 if not found).
+  Step 3: quizRepository.delete(existing) called.
+  Step 4: Hibernate deletes Quiz row + all QuestionQuiz rows + all question_options entries (cascade).
+  Step 5: Controller returns 204 No Content.
+
+13.6 When frontend uploads a file:
+  Step 1: Frontend creates FormData with file field.
+  Step 2: POST /api/cours/file/upload with multipart/form-data.
+  Step 3: FileController receives MultipartFile.
+  Step 4: FileStorageService generates name "1708123456789_file.pdf".
+  Step 5: File copied to /var/www/uploads/1708123456789_file.pdf.
+  Step 6: Controller constructs URL: "https://minolingo.online/uploads/1708123456789_file.pdf".
+  Step 7: Returns 200 with URL as plain text. Or 400 "Upload failed" on error.
+
+
+================================================================================
+14. SUMMARY FOR FRONTEND TEAM
+================================================================================
+
+14.1 What Must Be Implemented by Frontend
+  - Course management UI: list, create, edit, delete courses
+  - Pedagogical content management: add/edit/delete content items per course
+  - File upload UI: image/video/document uploads for courses and content
+  - Quiz management: create quizzes with inline questions, edit quiz metadata
+  - Question management: add/edit/delete questions per quiz
+  - Quiz cards display: list/manage quiz cards for UI
+  - Quiz categories display: list/manage categories
+  - Certification tracking: display certification status and progress
+  - Session management: schedule/display/manage learning sessions
+  - Practice items display: list/manage practice activities
+  - Error handling for all API calls (500 for not found, 400 for bad input)
+
+14.2 What Is Already Handled by Backend
+  - Full CRUD for all 9 entity types + file upload (46 endpoints total)
+  - Auto-generated IDs for all entities
+  - Cascade operations (deleting course deletes all content and files)
+  - Eager loading of children for courses and quizzes (no N+1 problem)
+  - File storage with unique naming
+  - JSON serialization with infinite recursion prevention
+
+14.3 What Must Be Validated Client-Side
+  - Since backend has NO validation, frontend SHOULD validate:
+    - Required fields before submission (title, description, etc.)
+    - String length limits (255 default, 1000 for descriptions, 5000 for course content)
+    - Enum values (use dropdowns, not free text)
+    - Date formats (YYYY-MM-DD for dates, ISO 8601 for datetimes)
+    - File size before upload (max 500MB)
+    - Numeric fields (no negative values where inappropriate)
+    - Parent references exist before creating children (cours.id, quiz.id)
+
+14.4 Potential Improvements
+  - Add Jakarta Validation annotations for server-side validation
+  - Add @ControllerAdvice for consistent error responses (currently 500 for not found instead of 404)
+  - Add custom exception classes (ResourceNotFoundException etc.)
+  - Add CORS configuration
+  - Add pagination support for list endpoints (repository methods exist but are not used)
+  - Add DTO layer instead of exposing entities directly
+  - Add CourseProgress endpoints (entity exists but no API)
+  - Add file type/size validation in FileStorageService
+  - Add security at microservice level (even if gateway handles auth)
+  - Consider using proper Date types for Certification.date instead of String
+  - Consider adding search/filter endpoints for courses, quizzes, etc.
+
+================================================================================
+END OF REPORT
+================================================================================
