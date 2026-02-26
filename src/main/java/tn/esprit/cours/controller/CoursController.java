@@ -16,7 +16,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CoursController {
 
-    private final AiService aiService; // this doesn't work we gotta fix it ASAP
+    private final AiService aiService; // this doesn't work we gotta fix it ASAP Lmao
     private final ICoursService coursService;
 
     @PostMapping("/cours/create-cours")
