@@ -14,7 +14,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ContenuPedagogiqueController {
 
-    private final IContenuPedagogiqueService contenuService;
+    private final IContenuPedagogiqueService contenuService;// content service
 
     @PostMapping("/contenus/create-contenu/{coursId}")
     public ResponseEntity<ContenuPedagogique> createContenu(@PathVariable Long coursId,
