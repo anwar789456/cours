@@ -11,7 +11,7 @@ import java.util.Map;
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl = "https://router.huggingface.co/models/facebook/opt-350m";
+    private final String apiUrl = "https://router.huggingface.co/models/deepseek-ai/DeepSeek-V3.2";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
