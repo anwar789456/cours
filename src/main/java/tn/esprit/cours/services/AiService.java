@@ -11,7 +11,7 @@ import java.util.Map;
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl = "https://router.huggingface.co/models/facebook/opt-1.3b";
+    private final String apiUrl = "https://router.huggingface.co/models/facebook/opt-350m";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
