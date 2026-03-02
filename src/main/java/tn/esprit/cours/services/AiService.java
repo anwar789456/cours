@@ -11,7 +11,7 @@ import java.util.Map;
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl = "https://api-inference.huggingface.co/models/facebook/opt-1.3b";
+    private final String apiUrl = "https://router.huggingface.co/models/facebook/opt-1.3b";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
@@ -58,45 +58,22 @@ public class AiService {
             List<Map<String, Object>> response = responseEntity.getBody();
 
             if (response != null && !response.isEmpty()) {
-                Object generated = response.get(0).get("generated_text");
-                if (generated != null) {
-                    return generated.toString().trim();
+                Map<String, Object> first = response.get(0);
+
+                // Check for 'generated_text'
+                if (first.containsKey("generated_text")) {
+                    return first.get("generated_text").toString().trim();
+                }
+
+                // If model returns an error
+                if (first.containsKey("error")) {
+                    return "AI generation failed: " + first.get("error");
                 }
             }
 
         } catch (Exception e) {
-            // Print all debug info to logs
-            System.out.println("❌ AI generation encountered an exception!");
-            System.out.println("Exception type: " + e.getClass().getName());
-            System.out.println("Exception message: " + e.getMessage());
-            e.printStackTrace(System.out);
-
-            // Build a detailed return message
-            StringBuilder debugMessage = new StringBuilder();
-            debugMessage.append("AI generation failed!\n");
-            debugMessage.append("Exception: ").append(e.getClass().getSimpleName()).append("\n");
-            debugMessage.append("Message: ").append(e.getMessage()).append("\n");
-
-            // Include cause chain
-            Throwable cause = e.getCause();
-            int causeLevel = 1;
-            while (cause != null) {
-                debugMessage.append("Cause ").append(causeLevel).append(": ")
-                            .append(cause.getClass().getSimpleName())
-                            .append(" - ").append(cause.getMessage()).append("\n");
-                cause = cause.getCause();
-                causeLevel++;
-            }
-
-            // Environment info (mask the token if you want)
-            String hfToken = System.getenv("HF_TOKEN");
-            if (hfToken != null && hfToken.length() > 8) {
-                hfToken = hfToken.substring(0, 4) + "****" + hfToken.substring(hfToken.length() - 4);
-            }
-            debugMessage.append("HF_TOKEN: ").append(hfToken).append("\n");
-            debugMessage.append("Working dir: ").append(System.getProperty("user.dir")).append("\n");
-
-            return debugMessage.toString();
+            e.printStackTrace();
+            return "AI generation failed: " + e.getMessage();
         }
 
         return "AI could not generate description.";
