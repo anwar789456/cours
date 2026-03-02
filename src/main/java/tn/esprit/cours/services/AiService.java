@@ -4,14 +4,12 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
 import java.util.Map;
 
 @Service
 public class AiService {
 
     private final RestTemplate restTemplate;
-    // Use your domain URL here (reverse-proxied to Ollama)
     private final String apiUrl = "https://minolingo.online/ollama/v1/completions";
 
     public AiService() {
@@ -19,15 +17,15 @@ public class AiService {
     }
 
     public String generateDescription(String title) {
+
         if (title == null || title.isBlank()) {
             return "Please provide a valid course title.";
         }
 
-        String prompt = "Write a short course description for " + title;
-
+        // Build JSON body for Ollama
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
-                "prompt", prompt,
+                "prompt", "Write a detailed, engaging, SEO-friendly 150-word course description for an online children's English learning platform.\nCourse Title: " + title,
                 "max_tokens", 200
         );
 
@@ -37,12 +35,19 @@ public class AiService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(apiUrl, request, Map.class);
+            ResponseEntity<Map> responseEntity =
+                    restTemplate.exchange(apiUrl, HttpMethod.POST, request, Map.class);
 
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    return choices.get(0).get("text").toString().trim();
+            Map<String, Object> response = responseEntity.getBody();
+
+            if (response != null && response.containsKey("choices")) {
+                Object choicesObj = response.get("choices");
+                if (choicesObj instanceof Iterable<?> choices) {
+                    for (Object choice : choices) {
+                        if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
+                            return choiceMap.get("text").toString().trim();
+                        }
+                    }
                 }
             }
 

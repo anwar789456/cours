@@ -55,7 +55,7 @@ public class CoursController {
             return ResponseEntity.ok(Map.of("description", description));
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("error", "AI generation failed"));
+            return ResponseEntity.status(500).body(Map.of("error", "AI generation failed: " + e.getMessage()));
         }
     }
 }
