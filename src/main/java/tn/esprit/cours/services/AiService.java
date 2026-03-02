@@ -1,52 +1,78 @@
 package tn.esprit.cours.services;
 
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
+    private final String apiUrl = "https://api-inference.huggingface.co/models/facebook/opt-1.3b";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
     }
 
     public String generateDescription(String title) {
-        // Read token from environment variable
+
         String token = System.getenv("HF_TOKEN");
         if (token == null || token.isBlank()) {
             return "AI token not set in environment variables.";
         }
 
-        String prompt = "Write a professional and engaging 150-word course description for an online children english learning platform.\nCourse Title: " + title;
+        if (title == null || title.isBlank()) {
+            return "Please provide a valid course title.";
+        }
+
+        // 🔥 Better structured prompt (important for OPT model)
+        String prompt = """
+        You are a professional educational content writer.
+
+        Write a detailed, engaging, and SEO-friendly 150-word course description 
+        for an online children's English learning platform.
+
+        Course Title: %s
+
+        Course Description:
+        """.formatted(title);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(token);
 
-        Map<String, Object> body = Map.of("inputs", prompt);
+        // 🔥 Add generation parameters (VERY IMPORTANT for OPT)
+        Map<String, Object> parameters = Map.of(
+                "max_new_tokens", 200,
+                "temperature", 0.7,
+                "top_p", 0.9,
+                "return_full_text", false
+        );
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("inputs", prompt);
+        body.put("parameters", parameters);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            // HuggingFace API call
-            List<Map<String, String>> response = restTemplate.postForObject(apiUrl, request, List.class);
+            ResponseEntity<List> responseEntity =
+                    restTemplate.exchange(apiUrl, HttpMethod.POST, request, List.class);
 
-            if (response != null && !response.isEmpty() && response.get(0).containsKey("generated_text")) {
-                String raw = response.get(0).get("generated_text");
-                // remove prompt prefix if present
-                return raw.startsWith(prompt) ? raw.substring(prompt.length()).trim() : raw.trim();
+            List<Map<String, Object>> response = responseEntity.getBody();
+
+            if (response != null && !response.isEmpty()) {
+                Object generated = response.get(0).get("generated_text");
+                if (generated != null) {
+                    return generated.toString().trim();
+                }
             }
+
         } catch (Exception e) {
             e.printStackTrace();
+            return "AI generation failed. Please try again.";
         }
 
         return "AI could not generate description.";
