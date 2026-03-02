@@ -65,8 +65,38 @@ public class AiService {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
-            return "AI generation failed. Please try again.";
+            // Print all debug info to logs
+            System.out.println("❌ AI generation encountered an exception!");
+            System.out.println("Exception type: " + e.getClass().getName());
+            System.out.println("Exception message: " + e.getMessage());
+            e.printStackTrace(System.out);
+
+            // Build a detailed return message
+            StringBuilder debugMessage = new StringBuilder();
+            debugMessage.append("AI generation failed!\n");
+            debugMessage.append("Exception: ").append(e.getClass().getSimpleName()).append("\n");
+            debugMessage.append("Message: ").append(e.getMessage()).append("\n");
+
+            // Include cause chain
+            Throwable cause = e.getCause();
+            int causeLevel = 1;
+            while (cause != null) {
+                debugMessage.append("Cause ").append(causeLevel).append(": ")
+                            .append(cause.getClass().getSimpleName())
+                            .append(" - ").append(cause.getMessage()).append("\n");
+                cause = cause.getCause();
+                causeLevel++;
+            }
+
+            // Environment info (mask the token if you want)
+            String hfToken = System.getenv("HF_TOKEN");
+            if (hfToken != null && hfToken.length() > 8) {
+                hfToken = hfToken.substring(0, 4) + "****" + hfToken.substring(hfToken.length() - 4);
+            }
+            debugMessage.append("HF_TOKEN: ").append(hfToken).append("\n");
+            debugMessage.append("Working dir: ").append(System.getProperty("user.dir")).append("\n");
+
+            return debugMessage.toString();
         }
 
         return "AI could not generate description.";
