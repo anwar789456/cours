@@ -10,7 +10,7 @@ import java.util.*;
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl = "https://api-inference.huggingface.co/models/facebook/opt-1.3b";
+    private final String apiUrl ="https://router.huggingface.co/models/facebook/opt-1.3b";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
