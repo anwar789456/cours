@@ -4,20 +4,20 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class AiService {
 
     private final RestTemplate restTemplate;
-    private final String apiUrl ="https://router.huggingface.co/models/facebook/opt-1.3b";
+    private final String apiUrl = "https://api-inference.huggingface.co/models/facebook/opt-1.3b";
 
     public AiService() {
         this.restTemplate = new RestTemplate();
     }
 
     public String generateDescription(String title) {
-
         String token = System.getenv("HF_TOKEN");
         if (token == null || token.isBlank()) {
             return "AI token not set in environment variables.";
@@ -27,33 +27,27 @@ public class AiService {
             return "Please provide a valid course title.";
         }
 
-        // 🔥 Better structured prompt (important for OPT model)
         String prompt = """
-        You are a professional educational content writer.
+                You are a professional educational content writer.
+                Write a detailed, engaging, and SEO-friendly 150-word course description
+                for an online children's English learning platform.
 
-        Write a detailed, engaging, and SEO-friendly 150-word course description 
-        for an online children's English learning platform.
+                Course Title: %s
 
-        Course Title: %s
-
-        Course Description:
-        """.formatted(title);
+                Course Description:
+                """.formatted(title);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(token);
 
-        // 🔥 Add generation parameters (VERY IMPORTANT for OPT)
-        Map<String, Object> parameters = Map.of(
-                "max_new_tokens", 200,
-                "temperature", 0.7,
-                "top_p", 0.9,
-                "return_full_text", false
+        Map<String, Object> body = Map.of(
+                "inputs", prompt,
+                "parameters", Map.of(
+                        "max_new_tokens", 200,
+                        "temperature", 0.7
+                )
         );
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("inputs", prompt);
-        body.put("parameters", parameters);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
