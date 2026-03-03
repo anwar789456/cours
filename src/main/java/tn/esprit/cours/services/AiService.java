@@ -28,7 +28,7 @@ public class AiService {
 
 
                 "prompt", """
-                Write a detailed, engaging, SEO-friendly 80-word course description 
+                Write a detailed, engaging, SEO-friendly 50-word course description 
                 for an online children's English learning platform.
                 IMPORTANT:
                 - Output ONLY the description text.
@@ -40,7 +40,7 @@ public class AiService {
 
                 Course Title: """ + title,
 
-                "max_tokens", 120
+                "max_tokens", 150
         );
 
         HttpHeaders headers = new HttpHeaders();
