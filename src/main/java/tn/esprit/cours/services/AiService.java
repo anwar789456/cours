@@ -25,8 +25,22 @@ public class AiService {
         // Build JSON body for Ollama
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
-                "prompt", "Write a detailed, engaging, SEO-friendly 150-word course description for an online children's English learning platform.\nCourse Title: " + title,
-                "max_tokens", 200
+
+
+                "prompt", """
+                Write a detailed, engaging, SEO-friendly 80-word course description 
+                for an online children's English learning platform.
+                IMPORTANT:
+                - Output ONLY the description text.
+                - Do NOT add introductions.
+                - Do NOT say "Here is a description" or anything alike.
+                - Do NOT add explanations.
+                - Do NOT use quotes.
+                - Do NOT add extra commentary.
+
+                Course Title: """ + title,
+
+                "max_tokens", 120
         );
 
         HttpHeaders headers = new HttpHeaders();
