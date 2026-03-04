@@ -36,8 +36,6 @@ public class QuizServiceImpl implements IQuizService {
         existing.setTitle(quiz.getTitle());
         existing.setDescription(quiz.getDescription());
         existing.setLevel(quiz.getLevel());
-        existing.setDateStart(quiz.getDateStart());
-        existing.setDateEnd(quiz.getDateEnd());
         existing.setStatus(quiz.getStatus());
         existing.setCourseId(quiz.getCourseId());
         existing.setXpReward(quiz.getXpReward());
