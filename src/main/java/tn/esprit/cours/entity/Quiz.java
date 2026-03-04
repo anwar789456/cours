@@ -32,10 +32,6 @@ public class Quiz {
     @Enumerated(EnumType.STRING)
     private QuizLevel level;
 
-    private LocalDate dateStart;
-
-    private LocalDate dateEnd;
-
     @Enumerated(EnumType.STRING)
     private QuizStatus status;
 
