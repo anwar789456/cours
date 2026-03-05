@@ -5,9 +5,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.esprit.cours.entity.Quiz;
+import tn.esprit.cours.services.AiService;
 import tn.esprit.cours.services.IQuizService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/cours")
@@ -15,6 +17,7 @@ import java.util.List;
 public class QuizController {
 
     private final IQuizService quizService;
+    private final AiService aiService;
 
     @PostMapping("/quizzes/create-quiz")
     public ResponseEntity<Quiz> createQuiz(@RequestBody Quiz quiz) {
@@ -51,5 +54,32 @@ public class QuizController {
     @PutMapping("/quizzes/unarchive/{id}")
     public ResponseEntity<Quiz> unarchiveQuiz(@PathVariable Long id) {
         return ResponseEntity.ok(quizService.archiveQuiz(id, false));
+    }
+
+    // ── AI Generation ──
+
+    @PostMapping("/quizzes/generate-description")
+    public ResponseEntity<Map<String, String>> generateQuizDescription(@RequestBody Map<String, String> payload) {
+        String title = payload.get("title");
+        String level = payload.getOrDefault("level", "");
+        try {
+            String description = aiService.generateQuizDescription(title, level);
+            return ResponseEntity.ok(Map.of("description", description));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "AI generation failed: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/quizzes/generate-questions")
+    public ResponseEntity<Map<String, String>> generateQuizQuestions(@RequestBody Map<String, Object> payload) {
+        String title = (String) payload.getOrDefault("title", "");
+        String level = (String) payload.getOrDefault("level", "BEGINNER");
+        int count = payload.containsKey("count") ? ((Number) payload.get("count")).intValue() : 3;
+        try {
+            String questionsJson = aiService.generateQuizQuestions(title, level, count);
+            return ResponseEntity.ok(Map.of("questions", questionsJson));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "AI generation failed: " + e.getMessage()));
+        }
     }
 }
