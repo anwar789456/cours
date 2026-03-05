@@ -39,9 +39,9 @@ public class Quiz {
 
     private Integer xpReward;
 
-    @Column(name = "archived", nullable = false)
+    @Column(name = "archived", nullable = false, columnDefinition = "boolean default false")
     @Builder.Default
-    private Boolean archived = false;
+    private boolean archived = false;
 
     // Relationship with questions — kept LAZY (default for @OneToMany)
     @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, orphanRemoval = true)

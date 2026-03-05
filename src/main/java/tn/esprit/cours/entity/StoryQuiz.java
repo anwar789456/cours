@@ -34,9 +34,9 @@ public class StoryQuiz {
 
     private String difficulty;
 
-    @Column(name = "archived", nullable = false)
+    @Column(name = "archived", nullable = false, columnDefinition = "boolean default false")
     @Builder.Default
-    private Boolean archived = false;
+    private boolean archived = false;
 
     @OneToMany(mappedBy = "storyQuiz", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
