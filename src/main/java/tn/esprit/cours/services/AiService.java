@@ -129,26 +129,25 @@ public class AiService {
 
         String levelInfo = (level != null && !level.isBlank()) ? level : "BEGINNER";
 
+        String prompt = "Generate exactly " + count + " multiple-choice quiz questions for a children's English learning platform.\n"
+                + "The quiz is titled: \"" + title + "\"\n"
+                + "Difficulty level: " + levelInfo + "\n\n"
+                + "IMPORTANT:\n"
+                + "- Output ONLY a valid JSON array, nothing else.\n"
+                + "- Each object must have exactly these fields:\n"
+                + "  \"question\": the question text,\n"
+                + "  \"options\": array of exactly 4 answer strings,\n"
+                + "  \"correctAnswer\": the correct answer (must match one of the options exactly),\n"
+                + "  \"explanation\": a short 1-sentence explanation of why the answer is correct\n"
+                + "- Make questions appropriate for children learning English.\n"
+                + "- Make the language simple and age-appropriate for " + levelInfo + " level.\n"
+                + "- Do NOT wrap in markdown code blocks.\n"
+                + "- Do NOT add any text before or after the JSON array.\n"
+                + "- Output MUST start with [ and end with ]";
+
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
-                "prompt", """
-                Generate exactly """ + count + """ multiple-choice quiz questions for a children's English learning platform.
-                The quiz is titled: \"""" + title + """\"
-                Difficulty level: """ + levelInfo + """
-
-                IMPORTANT:
-                - Output ONLY a valid JSON array, nothing else.
-                - Each object must have exactly these fields:
-                  "question": the question text,
-                  "options": array of exactly 4 answer strings,
-                  "correctAnswer": the correct answer (must match one of the options exactly),
-                  "explanation": a short 1-sentence explanation of why the answer is correct
-                - Make questions appropriate for children learning English.
-                - Make the language simple and age-appropriate for """ + levelInfo + """ level.
-                - Do NOT wrap in markdown code blocks.
-                - Do NOT add any text before or after the JSON array.
-                - Output MUST start with [ and end with ]
-                """,
+                "prompt", prompt,
                 "max_tokens", 1500
         );
 
