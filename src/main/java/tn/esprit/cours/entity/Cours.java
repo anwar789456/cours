@@ -32,6 +32,10 @@ public class Cours {
     @Column(length = 5000, name="content")
     private String content;
 
+    @Column(name = "archived", nullable = false)
+    @Builder.Default
+    private Boolean archived = false;
+
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "image_id")
     private ContentFile image; //new column

@@ -13,4 +13,5 @@ public interface ICoursService {
 
     Cours updateCours(Long id, Cours cours);
     void deleteCours(Long id);
+    Cours archiveCours(Long id, boolean archived);
 }

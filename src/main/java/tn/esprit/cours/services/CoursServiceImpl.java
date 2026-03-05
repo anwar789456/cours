@@ -72,4 +72,12 @@ public class CoursServiceImpl implements ICoursService {
                 .orElseThrow(() -> new RuntimeException("Cours not found with id: " + id));
         coursRepository.delete(existing);
     }
+
+    @Override
+    public Cours archiveCours(Long id, boolean archived) {
+        Cours existing = coursRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Cours not found with id: " + id));
+        existing.setArchived(archived);
+        return coursRepository.save(existing);
+    }
 }

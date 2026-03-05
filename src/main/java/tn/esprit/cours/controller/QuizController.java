@@ -42,4 +42,14 @@ public class QuizController {
         quizService.deleteQuiz(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/quizzes/archive/{id}")
+    public ResponseEntity<Quiz> archiveQuiz(@PathVariable Long id) {
+        return ResponseEntity.ok(quizService.archiveQuiz(id, true));
+    }
+
+    @PutMapping("/quizzes/unarchive/{id}")
+    public ResponseEntity<Quiz> unarchiveQuiz(@PathVariable Long id) {
+        return ResponseEntity.ok(quizService.archiveQuiz(id, false));
+    }
 }

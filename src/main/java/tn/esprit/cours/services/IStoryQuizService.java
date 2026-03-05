@@ -12,6 +12,7 @@ public interface IStoryQuizService {
     List<StoryQuiz> getAllStoryQuizzes();
     StoryQuiz updateStoryQuiz(Long id, StoryQuiz storyQuiz);
     void deleteStoryQuiz(Long id);
+    StoryQuiz archiveStoryQuiz(Long id, boolean archived);
     StoryWordBank getWordBank(Long storyQuizId);
     StoryWordBank saveWordBank(StoryWordBank wordBank);
     Map<Integer, Boolean> validateAnswers(Long storyQuizId, Map<Integer, String> answers);

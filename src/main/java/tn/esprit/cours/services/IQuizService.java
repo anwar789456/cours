@@ -13,4 +13,5 @@ public interface IQuizService {
 
     Quiz updateQuiz(Long id, Quiz quiz);
     void deleteQuiz(Long id);
+    Quiz archiveQuiz(Long id, boolean archived);
 }

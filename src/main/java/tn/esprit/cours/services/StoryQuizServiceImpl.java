@@ -70,6 +70,14 @@ public class StoryQuizServiceImpl implements IStoryQuizService {
     }
 
     @Override
+    public StoryQuiz archiveStoryQuiz(Long id, boolean archived) {
+        StoryQuiz existing = storyQuizRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("StoryQuiz not found with id: " + id));
+        existing.setArchived(archived);
+        return storyQuizRepository.save(existing);
+    }
+
+    @Override
     public StoryWordBank getWordBank(Long storyQuizId) {
         return storyWordBankRepository.findByStoryQuizId(storyQuizId)
                 .orElseThrow(() -> new RuntimeException("WordBank not found for storyQuizId: " + storyQuizId));

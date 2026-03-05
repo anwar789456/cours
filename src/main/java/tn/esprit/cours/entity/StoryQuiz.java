@@ -34,6 +34,10 @@ public class StoryQuiz {
 
     private String difficulty;
 
+    @Column(name = "archived", nullable = false)
+    @Builder.Default
+    private Boolean archived = false;
+
     @OneToMany(mappedBy = "storyQuiz", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @JsonManagedReference

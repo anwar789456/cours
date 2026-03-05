@@ -46,6 +46,16 @@ public class CoursController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/cours/archive/{id}")
+    public ResponseEntity<Cours> archiveCours(@PathVariable Long id) {
+        return ResponseEntity.ok(coursService.archiveCours(id, true));
+    }
+
+    @PutMapping("/cours/unarchive/{id}")
+    public ResponseEntity<Cours> unarchiveCours(@PathVariable Long id) {
+        return ResponseEntity.ok(coursService.archiveCours(id, false));
+    }
+
     // ================= AI GENERATED DESCRIPTION =================
     @PostMapping("/generate-description")
     public ResponseEntity<Map<String, String>> generateDescription(@RequestBody Map<String, String> payload) {

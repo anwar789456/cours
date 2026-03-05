@@ -48,4 +48,12 @@ public class QuizServiceImpl implements IQuizService {
                 .orElseThrow(() -> new RuntimeException("Quiz not found with id: " + id));
         quizRepository.delete(existing);
     }
+
+    @Override
+    public Quiz archiveQuiz(Long id, boolean archived) {
+        Quiz existing = quizRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Quiz not found with id: " + id));
+        existing.setArchived(archived);
+        return quizRepository.save(existing);
+    }
 }

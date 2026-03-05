@@ -50,6 +50,16 @@ public class StoryQuizController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/archive/{id}")
+    public ResponseEntity<StoryQuiz> archiveStoryQuiz(@PathVariable Long id) {
+        return ResponseEntity.ok(storyQuizService.archiveStoryQuiz(id, true));
+    }
+
+    @PutMapping("/unarchive/{id}")
+    public ResponseEntity<StoryQuiz> unarchiveStoryQuiz(@PathVariable Long id) {
+        return ResponseEntity.ok(storyQuizService.archiveStoryQuiz(id, false));
+    }
+
     // ── Word Bank ──
 
     @GetMapping("/{id}/word-bank")
