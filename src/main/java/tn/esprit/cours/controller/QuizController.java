@@ -70,14 +70,14 @@ public class QuizController {
         }
     }
 
-    @PostMapping("/quizzes/generate-questions")
-    public ResponseEntity<Map<String, String>> generateQuizQuestions(@RequestBody Map<String, Object> payload) {
+    @PostMapping("/quizzes/generate-single-question")
+    public ResponseEntity<Map<String, String>> generateSingleQuestion(@RequestBody Map<String, Object> payload) {
         String title = (String) payload.getOrDefault("title", "");
         String level = (String) payload.getOrDefault("level", "BEGINNER");
-        int count = payload.containsKey("count") ? ((Number) payload.get("count")).intValue() : 3;
+        int questionNumber = payload.containsKey("questionNumber") ? ((Number) payload.get("questionNumber")).intValue() : 1;
         try {
-            String questionsJson = aiService.generateQuizQuestions(title, level, count);
-            return ResponseEntity.ok(Map.of("questions", questionsJson));
+            String questionJson = aiService.generateSingleQuizQuestion(title, level, questionNumber);
+            return ResponseEntity.ok(Map.of("question", questionJson));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "AI generation failed: " + e.getMessage()));
         }

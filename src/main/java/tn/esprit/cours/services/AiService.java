@@ -1,6 +1,7 @@
 package tn.esprit.cours.services;
 
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -13,7 +14,10 @@ public class AiService {
     private final String apiUrl = "https://minolingo.online/ollama/v1/completions";
 
     public AiService() {
-        this.restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);  // 10s connect
+        factory.setReadTimeout(50000);     // 50s read (under nginx 60s limit)
+        this.restTemplate = new RestTemplate(factory);
     }
 
     public String generateDescription(String title) {
@@ -120,35 +124,22 @@ public class AiService {
         return "AI could not generate quiz description.";
     }
 
-    public String generateQuizQuestions(String title, String level, int count) {
+    public String generateSingleQuizQuestion(String title, String level, int questionNumber) {
         if (title == null || title.isBlank()) {
-            return "[]";
+            return "{}";
         }
-        if (count < 1) count = 3;
-        if (count > 10) count = 10;
 
         String levelInfo = (level != null && !level.isBlank()) ? level : "BEGINNER";
 
-        String prompt = "Generate exactly " + count + " multiple-choice quiz questions for a children's English learning platform.\n"
-                + "The quiz is titled: \"" + title + "\"\n"
-                + "Difficulty level: " + levelInfo + "\n\n"
-                + "IMPORTANT:\n"
-                + "- Output ONLY a valid JSON array, nothing else.\n"
-                + "- Each object must have exactly these fields:\n"
-                + "  \"question\": the question text,\n"
-                + "  \"options\": array of exactly 4 answer strings,\n"
-                + "  \"correctAnswer\": the correct answer (must match one of the options exactly),\n"
-                + "  \"explanation\": a short 1-sentence explanation of why the answer is correct\n"
-                + "- Make questions appropriate for children learning English.\n"
-                + "- Make the language simple and age-appropriate for " + levelInfo + " level.\n"
-                + "- Do NOT wrap in markdown code blocks.\n"
-                + "- Do NOT add any text before or after the JSON array.\n"
-                + "- Output MUST start with [ and end with ]";
+        String prompt = "Generate 1 multiple-choice question (#" + questionNumber + ") for a children's English quiz titled \"" + title + "\" (" + levelInfo + " level).\n"
+                + "Output ONLY a single JSON object with these fields:\n"
+                + "\"question\": text, \"options\": [4 strings], \"correctAnswer\": one of the options, \"explanation\": 1 sentence.\n"
+                + "Output MUST start with { and end with }. No extra text.";
 
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
                 "prompt", prompt,
-                "max_tokens", 1500
+                "max_tokens", 300
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -165,9 +156,9 @@ public class AiService {
                     for (Object choice : choices) {
                         if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
                             String raw = choiceMap.get("text").toString().trim();
-                            // Extract JSON array from the response
-                            int startIdx = raw.indexOf('[');
-                            int endIdx = raw.lastIndexOf(']');
+                            // Extract JSON object from response
+                            int startIdx = raw.indexOf('{');
+                            int endIdx = raw.lastIndexOf('}');
                             if (startIdx >= 0 && endIdx > startIdx) {
                                 return raw.substring(startIdx, endIdx + 1);
                             }
@@ -178,8 +169,8 @@ public class AiService {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            return "[]";
+            return "{}";
         }
-        return "[]";
+        return "{}";
     }
 }
