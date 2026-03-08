@@ -44,7 +44,7 @@ public class AiService {
 
                 Course Title: """ + title,
 
-                "max_tokens", 150
+                "max_tokens", 1200
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -96,7 +96,7 @@ public class AiService {
                 - Make it fun and encouraging for young learners.
 
                 Quiz Title: """ + title + levelInfo,
-                "max_tokens", 120
+                "max_tokens", 1200
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -139,7 +139,7 @@ public class AiService {
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
                 "prompt", prompt,
-                "max_tokens", 250
+                "max_tokens", 1200
         );
 
         HttpHeaders headers = new HttpHeaders();
