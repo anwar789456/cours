@@ -131,15 +131,15 @@ public class AiService {
 
         String levelInfo = (level != null && !level.isBlank()) ? level : "BEGINNER";
 
-        String prompt = "Generate 1 multiple-choice question (#" + questionNumber + ") for a children's English quiz titled \"" + title + "\" (" + levelInfo + " level).\n"
-                + "Output ONLY a single JSON object with these fields:\n"
-                + "\"question\": text, \"options\": [4 strings], \"correctAnswer\": one of the options, \"explanation\": 1 sentence.\n"
-                + "Output MUST start with { and end with }. No extra text.";
+        String prompt = "Generate 1 MCQ for kids English quiz \"" + title + "\" (" + levelInfo + "), question #" + questionNumber + ".\n"
+                + "Return ONLY this JSON:\n"
+                + "{\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":\"A\",\"explanation\":\"...\"}\n"
+                + "No markdown. No extra text. Start with { end with }.";
 
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
                 "prompt", prompt,
-                "max_tokens", 300
+                "max_tokens", 250
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -156,13 +156,7 @@ public class AiService {
                     for (Object choice : choices) {
                         if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
                             String raw = choiceMap.get("text").toString().trim();
-                            // Extract JSON object from response
-                            int startIdx = raw.indexOf('{');
-                            int endIdx = raw.lastIndexOf('}');
-                            if (startIdx >= 0 && endIdx > startIdx) {
-                                return raw.substring(startIdx, endIdx + 1);
-                            }
-                            return raw;
+                            return repairJson(raw);
                         }
                     }
                 }
@@ -172,5 +166,31 @@ public class AiService {
             return "{}";
         }
         return "{}";
+    }
+
+    private String repairJson(String raw) {
+        // Strip markdown code fences
+        raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
+
+        // Find the outermost { }
+        int start = raw.indexOf('{');
+        int end = raw.lastIndexOf('}');
+        if (start < 0) return "{}";
+
+        if (end <= start) {
+            // Missing closing brace — append one
+            raw = raw.substring(start) + "}";
+        } else {
+            raw = raw.substring(start, end + 1);
+        }
+
+        // Fix common LLM JSON issues:
+        // - Trailing commas before } or ]
+        raw = raw.replaceAll(",\\s*}", "}");
+        raw = raw.replaceAll(",\\s*]", "]");
+        // - Single quotes to double quotes
+        raw = raw.replace("'", "\"");
+
+        return raw;
     }
 }
