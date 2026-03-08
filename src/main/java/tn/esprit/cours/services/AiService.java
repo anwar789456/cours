@@ -139,7 +139,7 @@ public class AiService {
         Map<String, Object> body = Map.of(
                 "model", "llama3.2:1b",
                 "prompt", prompt,
-                "max_tokens", 1200
+                "max_tokens", 300
         );
 
         HttpHeaders headers = new HttpHeaders();
