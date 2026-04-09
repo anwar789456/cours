@@ -64,7 +64,7 @@ public class AvatarChatService {
         // Available courses
         List<Cours> courses = coursRepository.findAll();
         List<Cours> activeCourses = courses.stream()
-                .filter(c -> !Boolean.TRUE.equals(c.getArchived()))
+                .filter(c -> !c.isArchived())
                 .collect(Collectors.toList());
 
         if (!activeCourses.isEmpty()) {
@@ -102,7 +102,7 @@ public class AvatarChatService {
         // Available quizzes
         List<Quiz> quizzes = quizRepository.findAll();
         List<Quiz> openQuizzes = quizzes.stream()
-                .filter(q -> !Boolean.TRUE.equals(q.getArchived()))
+                .filter(q -> !q.isArchived())
                 .limit(10)
                 .collect(Collectors.toList());
 
