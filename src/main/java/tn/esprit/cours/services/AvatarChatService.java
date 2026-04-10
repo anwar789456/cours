@@ -71,7 +71,7 @@ public class AvatarChatService {
         Map<String, Object> body = new HashMap<>();
         body.put("model", model);
         body.put("prompt", prompt);
-        body.put("max_tokens", 350);
+        body.put("max_tokens", 120);
         body.put("stream", true);
 
         return webClient.post()
@@ -111,10 +111,16 @@ public class AvatarChatService {
                 || line.contains("\"finish_reason\":\"length\"")) {
             return null;
         }
-        // Find "text":"<value>" — handle JSON escapes manually
+        // Find "text":"<value>" — handle both compact and spaced JSON formats
         int idx = line.indexOf("\"text\":\"");
-        if (idx < 0) return null;
-        int start = idx + 8;
+        int start;
+        if (idx >= 0) {
+            start = idx + 8;
+        } else {
+            idx = line.indexOf("\"text\": \"");
+            if (idx < 0) return null;
+            start = idx + 9;
+        }
         if (start >= line.length()) return null;
 
         StringBuilder sb = new StringBuilder();
@@ -143,13 +149,9 @@ public class AvatarChatService {
     String buildPrompt(AvatarChatRequest request) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("You are \"Lingo\", a friendly, fun AI English tutor for kids on the MiniLingo platform. ");
-        sb.append("You help children aged 6-14 learn English. ");
-        sb.append("Keep your answers SHORT (2-3 sentences max), encouraging, and easy to understand. ");
-        sb.append("Use simple words. Be enthusiastic! ");
-        sb.append("If a kid asks about a course or quiz, recommend one by name from the list. ");
-        sb.append("If they ask an English grammar or vocabulary question, explain simply with an example. ");
-        sb.append("Never use markdown. Reply in plain text only.\n\n");
+        sb.append("You are Lingo, a fun English tutor for kids on MiniLingo. ");
+        sb.append("RULES: Reply in 1-2 short sentences only. Never more. No lists. No markdown. Plain text only. ");
+        sb.append("Be cheerful and simple. If asked about a course or quiz, name one from the list below.\n\n");
 
         List<Cours> courses = coursRepository.findAll();
         List<Cours> activeCourses = courses.stream()
