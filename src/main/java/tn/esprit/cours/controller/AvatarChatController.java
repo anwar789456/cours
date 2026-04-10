@@ -75,10 +75,6 @@ public class AvatarChatController {
                                             .data("Oops! Try asking again."));
                                     emitter.complete();
                                 } else {
-                                    // Prepend a space: the SSE parser strips one leading
-                                    // space after "data:", so this protects the token's own
-                                    // leading spaces from being lost (see WHATWG SSE spec).
-                                    // Strip newlines first — they'd break the SSE frame.
                                     String safe = token.replace('\n', ' ').replace('\r', ' ');
                                     emitter.send(" " + safe);
                                 }

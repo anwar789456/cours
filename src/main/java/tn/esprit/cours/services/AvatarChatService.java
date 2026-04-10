@@ -151,9 +151,9 @@ public class AvatarChatService {
     public String buildPrompt(AvatarChatRequest request) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("You are Lingo, a fun English tutor for kids on MiniLingo. ");
-        sb.append("RULES: Reply in 1-2 short sentences only. Never more. No lists. No markdown. Plain text only. ");
-        sb.append("Be cheerful and simple. If asked about a course or quiz, name one from the list below.\n\n");
+        sb.append("You are a fun English tutor for kids. ");
+        sb.append("RULES: Reply in 1-3 short sentences only. ");
+        sb.append("Be cheerful and simple. If asked about a course or quiz, recommend one from the list below.\n\n");
 
         List<Cours> courses = coursRepository.findAll();
         List<Cours> activeCourses = courses.stream()
