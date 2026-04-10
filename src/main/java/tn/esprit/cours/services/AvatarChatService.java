@@ -38,7 +38,7 @@ public class AvatarChatService {
     //   gemma2:2b     ~1.6 GB  - Google model, better reasoning than llama 1b
     //   llama3.2:3b   ~2.0 GB  - decent upgrade from 1b, same family
     //   llama3.1:8b   ~5.0 GB  - very smart, needs 8 GB VPS RAM
-    @Value("${avatar.ai.model:llama3.2:1b}")
+    @Value("${avatar.ai.model:qwen2.5:3b}")
     private String model;
 
     private final RestTemplate restTemplate;

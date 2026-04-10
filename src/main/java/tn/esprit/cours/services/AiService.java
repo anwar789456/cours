@@ -13,7 +13,7 @@ public class AiService {
     private final RestTemplate restTemplate;
     private final String apiUrl = "https://minolingo.online/ollama/v1/completions";
 
-    @org.springframework.beans.factory.annotation.Value("${avatar.ai.model:qwen2.5:7b}")
+    @org.springframework.beans.factory.annotation.Value("${avatar.ai.model:qwen2.5:3b}")
     private String model;
 
     public AiService() {
