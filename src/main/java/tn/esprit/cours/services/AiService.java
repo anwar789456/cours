@@ -13,6 +13,9 @@ public class AiService {
     private final RestTemplate restTemplate;
     private final String apiUrl = "https://minolingo.online/ollama/v1/completions";
 
+    @org.springframework.beans.factory.annotation.Value("${avatar.ai.model:qwen2.5:7b}")
+    private String model;
+
     public AiService() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000);  // 10s connect
@@ -28,7 +31,7 @@ public class AiService {
 
         // Build JSON body for Ollama
         Map<String, Object> body = Map.of(
-                "model", "llama3.2:1b",
+                "model", model,
 
 
                 "prompt", """
@@ -85,7 +88,7 @@ public class AiService {
         String levelInfo = (level != null && !level.isBlank()) ? "\nDifficulty Level: " + level : "";
 
         Map<String, Object> body = Map.of(
-                "model", "llama3.2:1b",
+                "model", model,
                 "prompt", """
                 Write a short, engaging 20-word quiz description for a children's English learning platform.
                 IMPORTANT:
@@ -137,7 +140,7 @@ public class AiService {
                 + "No markdown. No extra text. Start with { end with }.";
 
         Map<String, Object> body = Map.of(
-                "model", "llama3.2:1b",
+                "model", model,
                 "prompt", prompt,
                 "max_tokens", 300
         );

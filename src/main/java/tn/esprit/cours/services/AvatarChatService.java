@@ -1,9 +1,14 @@
 package tn.esprit.cours.services;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import tn.esprit.cours.entity.Cours;
 import tn.esprit.cours.entity.CourseProgress;
 import tn.esprit.cours.entity.Quiz;
@@ -14,9 +19,8 @@ import tn.esprit.cours.repository.CoursRepository;
 import tn.esprit.cours.repository.CourseProgressRepository;
 import tn.esprit.cours.repository.QuizRepository;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,7 +31,18 @@ public class AvatarChatService {
     private final QuizRepository quizRepository;
 
     private final String ollamaUrl = "https://minolingo.online/ollama/v1/completions";
+
+    // ── Change this in application.properties: avatar.ai.model=phi3.5:mini
+    // Recommended free models (pull with: ollama pull <name>):
+    //   phi3.5:mini   ~2.2 GB  - smartest small model, great at following instructions
+    //   gemma2:2b     ~1.6 GB  - Google model, better reasoning than llama 1b
+    //   llama3.2:3b   ~2.0 GB  - decent upgrade from 1b, same family
+    //   llama3.1:8b   ~5.0 GB  - very smart, needs 8 GB VPS RAM
+    @Value("${avatar.ai.model:llama3.2:1b}")
+    private String model;
+
     private final RestTemplate restTemplate;
+    private final WebClient webClient;
 
     public AvatarChatService(CoursRepository coursRepository,
                              CourseProgressRepository courseProgressRepository,
@@ -38,10 +53,15 @@ public class AvatarChatService {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000);
-        factory.setReadTimeout(50000);
+        factory.setReadTimeout(55000);
         this.restTemplate = new RestTemplate(factory);
+
+        this.webClient = WebClient.builder()
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
+                .build();
     }
 
+    // ── Non-streaming (used by floating widget) ──────────────────────────────
     public AvatarChatResponse chat(AvatarChatRequest request) {
         String prompt = buildPrompt(request);
         String aiReply = callOllama(prompt);
@@ -49,161 +69,180 @@ public class AvatarChatService {
         return new AvatarChatResponse(aiReply, suggestions);
     }
 
-    private String buildPrompt(AvatarChatRequest request) {
+    // ── Streaming (used by dedicated tutor page) ─────────────────────────────
+    public Flux<String> streamChat(AvatarChatRequest request) {
+        String prompt = buildPrompt(request);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("prompt", prompt);
+        body.put("max_tokens", 350);
+        body.put("stream", true);
+
+        return webClient.post()
+                .uri(ollamaUrl)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToFlux(DataBuffer.class)
+                .concatMap(buffer -> {
+                    byte[] bytes = new byte[buffer.readableByteCount()];
+                    buffer.read(bytes);
+                    DataBufferUtils.release(buffer);
+                    String chunk = new String(bytes, StandardCharsets.UTF_8);
+
+                    // Each chunk may contain multiple newline-delimited JSON lines
+                    List<String> tokens = new ArrayList<>();
+                    for (String line : chunk.split("\n")) {
+                        line = line.trim();
+                        if (line.isBlank() || "[DONE]".equals(line)) continue;
+                        // Strip SSE "data: " prefix if present
+                        if (line.startsWith("data: ")) line = line.substring(6).trim();
+                        if ("[DONE]".equals(line) || line.isBlank()) continue;
+                        String token = extractStreamToken(line);
+                        if (token != null && !token.isEmpty()) tokens.add(token);
+                    }
+                    return Flux.fromIterable(tokens);
+                })
+                .onErrorReturn("[ERROR]");
+    }
+
+    // ── Extract one text token from a streaming JSON line ────────────────────
+    private String extractStreamToken(String line) {
+        if (line == null || line.isBlank()) return null;
+        // Skip lines indicating end/error
+        if (line.equals("[DONE]") || line.contains("\"finish_reason\":\"stop\"")
+                || line.contains("\"finish_reason\": \"stop\"")
+                || line.contains("\"finish_reason\":\"length\"")) {
+            return null;
+        }
+        // Find "text":"<value>" — handle JSON escapes manually
+        int idx = line.indexOf("\"text\":\"");
+        if (idx < 0) return null;
+        int start = idx + 8;
+        if (start >= line.length()) return null;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '\\' && i + 1 < line.length()) {
+                char next = line.charAt(++i);
+                switch (next) {
+                    case '"'  -> sb.append('"');
+                    case 'n'  -> sb.append('\n');
+                    case 't'  -> sb.append('\t');
+                    case 'r'  -> {} // skip CR
+                    case '\\' -> sb.append('\\');
+                    default   -> { sb.append('\\'); sb.append(next); }
+                }
+            } else if (c == '"') {
+                break;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    // ── Shared prompt builder ─────────────────────────────────────────────────
+    String buildPrompt(AvatarChatRequest request) {
         StringBuilder sb = new StringBuilder();
 
-        // System instruction
         sb.append("You are \"Lingo\", a friendly, fun AI English tutor for kids on the MiniLingo platform. ");
         sb.append("You help children aged 6-14 learn English. ");
         sb.append("Keep your answers SHORT (2-3 sentences max), encouraging, and easy to understand. ");
         sb.append("Use simple words. Be enthusiastic! ");
-        sb.append("If a kid asks about a course or quiz, recommend one from the list below by name. ");
-        sb.append("If they ask an English grammar or vocabulary question, explain it simply with an example. ");
-        sb.append("Never use markdown formatting. Reply in plain text only.\n\n");
+        sb.append("If a kid asks about a course or quiz, recommend one by name from the list. ");
+        sb.append("If they ask an English grammar or vocabulary question, explain simply with an example. ");
+        sb.append("Never use markdown. Reply in plain text only.\n\n");
 
-        // Available courses
         List<Cours> courses = coursRepository.findAll();
         List<Cours> activeCourses = courses.stream()
-                .filter(c -> !c.isArchived())
-                .collect(Collectors.toList());
+                .filter(c -> !c.isArchived()).collect(Collectors.toList());
 
         if (!activeCourses.isEmpty()) {
             sb.append("AVAILABLE COURSES:\n");
-            for (Cours c : activeCourses.stream().limit(15).collect(Collectors.toList())) {
+            activeCourses.stream().limit(12).forEach(c -> {
                 sb.append("- \"").append(c.getTitle()).append("\"");
                 if (c.getDescription() != null && !c.getDescription().isBlank()) {
-                    String desc = c.getDescription();
-                    if (desc.length() > 80) desc = desc.substring(0, 80) + "...";
-                    sb.append(" (").append(desc).append(")");
+                    String d = c.getDescription();
+                    sb.append(" (").append(d.length() > 70 ? d.substring(0, 70) + "..." : d).append(")");
                 }
                 sb.append("\n");
-            }
+            });
             sb.append("\n");
         }
 
-        // Student progress
         if (request.getUserId() != null && request.getUserId() > 0) {
             List<CourseProgress> progresses = courseProgressRepository.findByUserId(request.getUserId());
             if (!progresses.isEmpty()) {
-                sb.append("STUDENT'S PROGRESS:\n");
-                for (CourseProgress p : progresses) {
-                    String courseTitle = activeCourses.stream()
+                sb.append("STUDENT PROGRESS:\n");
+                progresses.forEach(p -> {
+                    String title = activeCourses.stream()
                             .filter(c -> c.getId().equals(p.getCoursId()))
-                            .map(Cours::getTitle)
-                            .findFirst()
+                            .map(Cours::getTitle).findFirst()
                             .orElse("Course #" + p.getCoursId());
-                    sb.append("- ").append(courseTitle).append(": ")
-                            .append(String.format("%.0f", p.getProgress())).append("% complete\n");
-                }
+                    sb.append("- ").append(title).append(": ")
+                            .append(String.format("%.0f", p.getProgress())).append("%\n");
+                });
                 sb.append("\n");
             }
         }
 
-        // Available quizzes
-        List<Quiz> quizzes = quizRepository.findAll();
-        List<Quiz> openQuizzes = quizzes.stream()
-                .filter(q -> !q.isArchived())
-                .limit(10)
-                .collect(Collectors.toList());
-
+        List<Quiz> openQuizzes = quizRepository.findAll().stream()
+                .filter(q -> !q.isArchived()).limit(8).collect(Collectors.toList());
         if (!openQuizzes.isEmpty()) {
             sb.append("AVAILABLE QUIZZES:\n");
-            for (Quiz q : openQuizzes) {
-                sb.append("- \"").append(q.getTitle()).append("\" (Level: ")
-                        .append(q.getLevel()).append(", XP: ").append(q.getXpReward()).append(")\n");
-            }
+            openQuizzes.forEach(q -> sb.append("- \"").append(q.getTitle())
+                    .append("\" (").append(q.getLevel()).append(")\n"));
             sb.append("\n");
         }
 
-        // Current page context
         if (request.getCurrentPage() != null && !request.getCurrentPage().isBlank()) {
-            sb.append("The student is currently on the page: ").append(request.getCurrentPage()).append("\n\n");
+            sb.append("Student is on page: ").append(request.getCurrentPage()).append("\n\n");
         }
 
-        // Student message
-        sb.append("Student says: ").append(request.getMessage()).append("\n");
-        sb.append("Lingo's reply:");
-
+        sb.append("Student says: ").append(request.getMessage()).append("\nLingo's reply:");
         return sb.toString();
     }
 
+    // ── Non-streaming Ollama call (for floating widget) ───────────────────────
     private String callOllama(String prompt) {
-        Map<String, Object> body = Map.of(
-                "model", "llama3.2:1b",
-                "prompt", prompt,
-                "max_tokens", 300
-        );
-
+        Map<String, Object> body = Map.of("model", model, "prompt", prompt, "max_tokens", 300);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
         try {
-            ResponseEntity<Map> responseEntity =
-                    restTemplate.exchange(ollamaUrl, HttpMethod.POST, request, Map.class);
-
-            Map<String, Object> response = responseEntity.getBody();
-
-            if (response != null && response.containsKey("choices")) {
-                Object choicesObj = response.get("choices");
-                if (choicesObj instanceof Iterable<?> choices) {
-                    for (Object choice : choices) {
-                        if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
-                            String raw = choiceMap.get("text").toString().trim();
-                            // Clean up: take only first paragraph to keep it short
-                            int doubleNewline = raw.indexOf("\n\n");
-                            if (doubleNewline > 0 && doubleNewline < raw.length() - 2) {
-                                raw = raw.substring(0, doubleNewline).trim();
-                            }
-                            return raw;
-                        }
+            ResponseEntity<Map> res = restTemplate.exchange(
+                    ollamaUrl, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+            Map<String, Object> r = res.getBody();
+            if (r != null && r.containsKey("choices")) {
+                for (Object ch : (Iterable<?>) r.get("choices")) {
+                    if (ch instanceof Map<?, ?> m && m.containsKey("text")) {
+                        String raw = m.get("text").toString().trim();
+                        int nl = raw.indexOf("\n\n");
+                        return nl > 0 ? raw.substring(0, nl).trim() : raw;
                     }
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            return "Oops! I'm having a little trouble right now. Try asking me again in a moment!";
+            return "Oops! I'm having a little trouble right now. Try asking again!";
         }
-
-        return "Hmm, I didn't quite get that. Could you try asking me in a different way?";
+        return "Hmm, could you try asking me in a different way?";
     }
 
-    private List<Suggestion> extractSuggestions(String reply, String currentPage) {
-        List<Suggestion> suggestions = new ArrayList<>();
-        String lower = reply.toLowerCase();
-
-        // Smart suggestions based on what Lingo is talking about
-        if (lower.contains("course") || lower.contains("lesson") || lower.contains("learn")) {
-            if (currentPage == null || !currentPage.contains("/courses")) {
-                suggestions.add(new Suggestion("Browse Courses", "/courses"));
-            }
-        }
-        if (lower.contains("quiz") || lower.contains("test") || lower.contains("practice")) {
-            if (currentPage == null || !currentPage.contains("/quiz")) {
-                suggestions.add(new Suggestion("Take a Quiz", "/quiz"));
-            }
-        }
-        if (lower.contains("friend") || lower.contains("together") || lower.contains("classmate")) {
-            if (currentPage == null || !currentPage.contains("/friends")) {
-                suggestions.add(new Suggestion("Find Friends", "/friends"));
-            }
-        }
-        if (lower.contains("session") || lower.contains("tutor") || lower.contains("teacher")) {
-            if (currentPage == null || !currentPage.contains("/sessions")) {
-                suggestions.add(new Suggestion("Book a Session", "/sessions"));
-            }
-        }
-        if (lower.contains("forum") || lower.contains("discuss") || lower.contains("ask")) {
-            if (currentPage == null || !currentPage.contains("/forums")) {
-                suggestions.add(new Suggestion("Visit Forums", "/forums"));
-            }
-        }
-
-        // Limit to max 3 suggestions
-        if (suggestions.size() > 3) {
-            suggestions = suggestions.subList(0, 3);
-        }
-
-        return suggestions;
+    // ── Suggestion extraction ─────────────────────────────────────────────────
+    List<Suggestion> extractSuggestions(String reply, String currentPage) {
+        List<Suggestion> list = new ArrayList<>();
+        String l = reply.toLowerCase();
+        String p = currentPage == null ? "" : currentPage;
+        if ((l.contains("course") || l.contains("lesson") || l.contains("learn")) && !p.contains("/courses"))
+            list.add(new Suggestion("Browse Courses", "/courses"));
+        if ((l.contains("quiz") || l.contains("test") || l.contains("practice")) && !p.contains("/quiz"))
+            list.add(new Suggestion("Take a Quiz", "/quiz"));
+        if ((l.contains("session") || l.contains("tutor") || l.contains("teacher")) && !p.contains("/sessions"))
+            list.add(new Suggestion("Book a Session", "/sessions"));
+        if ((l.contains("forum") || l.contains("discuss")) && !p.contains("/forums"))
+            list.add(new Suggestion("Visit Forums", "/forums"));
+        return list.size() > 3 ? list.subList(0, 3) : list;
     }
 }
