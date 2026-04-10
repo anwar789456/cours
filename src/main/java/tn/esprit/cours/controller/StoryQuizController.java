@@ -113,7 +113,9 @@ public class StoryQuizController {
             List<StoryBlank> blankList = new ArrayList<>();
             if (blanksObj instanceof List<?> blanksRaw) {
                 for (Object b : blanksRaw) {
-                    if (b instanceof Map<?, ?> bMap) {
+                    if (b instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> bMap = (Map<String, Object>) b;
                         StoryBlank blank = new StoryBlank();
                         blank.setBlankIndex(((Number) bMap.getOrDefault("blankIndex", 0)).intValue());
                         blank.setCorrectWord((String) bMap.getOrDefault("correctWord", ""));
