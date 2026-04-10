@@ -76,7 +76,7 @@ public class AvatarChatController {
                                     emitter.complete();
                                 } else {
                                     String safe = token.replace('\n', ' ').replace('\r', ' ');
-                                    emitter.send(safe);
+                                    emitter.send(" " + safe);
                                 }
                             } catch (IOException e) {
                                 emitter.completeWithError(e);
