@@ -1,15 +1,20 @@
 package tn.esprit.cours.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.esprit.cours.entity.StoryAttempt;
+import tn.esprit.cours.entity.StoryBlank;
 import tn.esprit.cours.entity.StoryQuiz;
 import tn.esprit.cours.entity.StoryWordBank;
+import tn.esprit.cours.services.AiService;
 import tn.esprit.cours.services.IStoryAttemptService;
 import tn.esprit.cours.services.IStoryQuizService;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +25,8 @@ public class StoryQuizController {
 
     private final IStoryQuizService storyQuizService;
     private final IStoryAttemptService storyAttemptService;
+    private final AiService aiService;
+    private final ObjectMapper objectMapper;
 
     // ── Story Quiz CRUD ──
 
@@ -71,6 +78,69 @@ public class StoryQuizController {
     public ResponseEntity<StoryWordBank> saveWordBank(@PathVariable Long id, @RequestBody StoryWordBank wordBank) {
         wordBank.setStoryQuizId(id);
         return ResponseEntity.ok(storyQuizService.saveWordBank(wordBank));
+    }
+
+    // ── AI Generation ──
+
+    @PostMapping("/generate-full-story")
+    public ResponseEntity<?> generateFullStoryQuiz(@RequestBody Map<String, Object> payload) {
+        String title = (String) payload.getOrDefault("title", "");
+        String difficulty = (String) payload.getOrDefault("difficulty", "BEGINNER");
+        int xpReward = payload.containsKey("xpReward") ? ((Number) payload.get("xpReward")).intValue() : 50;
+
+        try {
+            String json = aiService.generateFullStoryQuiz(title, difficulty);
+
+            Map<String, Object> data;
+            try {
+                data = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception parseEx) {
+                return ResponseEntity.status(500).body(Map.of("error", "AI returned invalid JSON"));
+            }
+
+            String storyTemplate = (String) data.getOrDefault("storyTemplate", "");
+            Object blanksObj = data.get("blanks");
+            Object wordBankObj = data.get("wordBank");
+
+            // Build StoryQuiz entity
+            StoryQuiz storyQuiz = new StoryQuiz();
+            storyQuiz.setTitle(title);
+            storyQuiz.setStoryTemplate(storyTemplate);
+            storyQuiz.setDifficulty(difficulty);
+            storyQuiz.setXpReward(xpReward);
+
+            // Parse blanks
+            List<StoryBlank> blankList = new ArrayList<>();
+            if (blanksObj instanceof List<?> blanksRaw) {
+                for (Object b : blanksRaw) {
+                    if (b instanceof Map<?, ?> bMap) {
+                        StoryBlank blank = new StoryBlank();
+                        blank.setBlankIndex(((Number) bMap.getOrDefault("blankIndex", 0)).intValue());
+                        blank.setCorrectWord((String) bMap.getOrDefault("correctWord", ""));
+                        blank.setHint((String) bMap.getOrDefault("hint", ""));
+                        blank.setStoryQuiz(storyQuiz);
+                        blankList.add(blank);
+                    }
+                }
+            }
+            storyQuiz.setBlanks(blankList);
+
+            StoryQuiz saved = storyQuizService.createStoryQuiz(storyQuiz);
+
+            // Save word bank
+            if (wordBankObj instanceof List<?> wordsRaw) {
+                List<String> words = wordsRaw.stream().map(Object::toString).toList();
+                StoryWordBank wordBank = new StoryWordBank();
+                wordBank.setStoryQuizId(saved.getId());
+                wordBank.setWords(new ArrayList<>(words));
+                storyQuizService.saveWordBank(wordBank);
+            }
+
+            return ResponseEntity.ok(storyQuizService.getStoryQuizById(saved.getId()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "AI story generation failed: " + e.getMessage()));
+        }
     }
 
     // ── Validate Answers ──

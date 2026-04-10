@@ -171,6 +171,115 @@ public class AiService {
         return "{}";
     }
 
+    public String generateFullQuiz(String title, String description, String level) {
+        if (title == null || title.isBlank()) return "[]";
+
+        String levelInfo = (level != null && !level.isBlank()) ? level : "BEGINNER";
+        String descInfo = (description != null && !description.isBlank())
+                ? "\nDescription: " + description : "";
+
+        String prompt = "Generate exactly 5 MCQ questions for a kids English quiz.\n"
+                + "Quiz: \"" + title + "\" | Level: " + levelInfo + descInfo + "\n"
+                + "Return ONLY a JSON array (no markdown, no extra text):\n"
+                + "[{\"question\":\"...\",\"options\":[\"opt1\",\"opt2\",\"opt3\",\"opt4\"],\"correctAnswer\":\"opt1\",\"explanation\":\"...\"}]\n"
+                + "correctAnswer must be the exact text of one option. Start with [ end with ].";
+
+        Map<String, Object> body = Map.of(
+                "model", model,
+                "prompt", prompt,
+                "max_tokens", 1500
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map> responseEntity =
+                    restTemplate.exchange(apiUrl, HttpMethod.POST, request, Map.class);
+            Map<String, Object> response = responseEntity.getBody();
+            if (response != null && response.containsKey("choices")) {
+                Object choicesObj = response.get("choices");
+                if (choicesObj instanceof Iterable<?> choices) {
+                    for (Object choice : choices) {
+                        if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
+                            String raw = choiceMap.get("text").toString().trim();
+                            return repairJsonArray(raw);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "[]";
+        }
+        return "[]";
+    }
+
+    public String generateFullStoryQuiz(String title, String difficulty) {
+        if (title == null || title.isBlank()) return "{}";
+
+        String diff = (difficulty != null && !difficulty.isBlank()) ? difficulty : "BEGINNER";
+
+        String prompt = "Generate a fill-in-the-blank story quiz for kids learning English.\n"
+                + "Title: \"" + title + "\" | Difficulty: " + diff + "\n"
+                + "Write a short story (3-4 sentences) with exactly 4 blanks using {blank_1} {blank_2} {blank_3} {blank_4}.\n"
+                + "Return ONLY this JSON (no markdown, no extra text):\n"
+                + "{\"storyTemplate\":\"story with {blank_1} and {blank_2}...\","
+                + "\"blanks\":[{\"blankIndex\":1,\"correctWord\":\"word\",\"hint\":\"short hint\"},"
+                + "{\"blankIndex\":2,\"correctWord\":\"word\",\"hint\":\"short hint\"},"
+                + "{\"blankIndex\":3,\"correctWord\":\"word\",\"hint\":\"short hint\"},"
+                + "{\"blankIndex\":4,\"correctWord\":\"word\",\"hint\":\"short hint\"}],"
+                + "\"wordBank\":[\"correct1\",\"correct2\",\"correct3\",\"correct4\",\"distractor1\",\"distractor2\",\"distractor3\",\"distractor4\"]}\n"
+                + "wordBank must include all 4 correct words plus 4 distractor words. Start with { end with }.";
+
+        Map<String, Object> body = Map.of(
+                "model", model,
+                "prompt", prompt,
+                "max_tokens", 700
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map> responseEntity =
+                    restTemplate.exchange(apiUrl, HttpMethod.POST, request, Map.class);
+            Map<String, Object> response = responseEntity.getBody();
+            if (response != null && response.containsKey("choices")) {
+                Object choicesObj = response.get("choices");
+                if (choicesObj instanceof Iterable<?> choices) {
+                    for (Object choice : choices) {
+                        if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
+                            String raw = choiceMap.get("text").toString().trim();
+                            return repairJson(raw);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "{}";
+        }
+        return "{}";
+    }
+
+    private String repairJsonArray(String raw) {
+        raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
+        int start = raw.indexOf('[');
+        int end = raw.lastIndexOf(']');
+        if (start < 0) return "[]";
+        if (end <= start) {
+            raw = raw.substring(start) + "]";
+        } else {
+            raw = raw.substring(start, end + 1);
+        }
+        raw = raw.replaceAll(",\\s*}", "}");
+        raw = raw.replaceAll(",\\s*]", "]");
+        return raw;
+    }
+
     private String repairJson(String raw) {
         // Strip markdown code fences
         raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
