@@ -32,12 +32,7 @@ public class AvatarChatService {
 
     private final String ollamaUrl = "https://minolingo.online/ollama/v1/completions";
 
-    // ── Change this in application.properties: avatar.ai.model=phi3.5:mini
-    // Recommended free models (pull with: ollama pull <name>):
-    //   phi3.5:mini   ~2.2 GB  - smartest small model, great at following instructions
-    //   gemma2:2b     ~1.6 GB  - Google model, better reasoning than llama 1b
-    //   llama3.2:3b   ~2.0 GB  - decent upgrade from 1b, same family
-    //   llama3.1:8b   ~5.0 GB  - very smart, needs 8 GB VPS RAM
+ 
     @Value("${avatar.ai.model:qwen2.5:3b}")
     private String model;
 
