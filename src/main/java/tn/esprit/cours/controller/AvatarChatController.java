@@ -12,6 +12,7 @@ import tn.esprit.cours.entity.dto.AvatarChatResponse;
 import tn.esprit.cours.services.AvatarChatService;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
@@ -25,6 +26,16 @@ public class AvatarChatController {
     @PostMapping("/chat")
     public ResponseEntity<AvatarChatResponse> chat(@RequestBody AvatarChatRequest request) {
         return ResponseEntity.ok(avatarChatService.chat(request));
+    }
+
+    // ── Prompt-preparation endpoint (fast-path for tutor page) ───────────────
+    @PostMapping("/prepare")
+    public ResponseEntity<Map<String, String>> prepare(@RequestBody AvatarChatRequest request) {
+        String prompt = avatarChatService.buildPrompt(request);
+        return ResponseEntity.ok(Map.of(
+                "prompt", prompt,
+                "model",  avatarChatService.getModel()
+        ));
     }
 
     // ── Streaming endpoint (tutor page) ───────────────────────────────────────

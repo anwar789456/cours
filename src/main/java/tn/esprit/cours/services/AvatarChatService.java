@@ -36,6 +36,8 @@ public class AvatarChatService {
     @Value("${avatar.ai.model:qwen2.5:3b}")
     private String model;
 
+    public String getModel() { return model; }
+
     private final RestTemplate restTemplate;
     private final WebClient webClient;
 
@@ -146,7 +148,7 @@ public class AvatarChatService {
     }
 
     // ── Shared prompt builder ─────────────────────────────────────────────────
-    String buildPrompt(AvatarChatRequest request) {
+    public String buildPrompt(AvatarChatRequest request) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("You are Lingo, a fun English tutor for kids on MiniLingo. ");
