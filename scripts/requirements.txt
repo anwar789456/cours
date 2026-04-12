@@ -1,0 +1,2 @@
+language-tool-python==2.8
+requests==2.32.0
