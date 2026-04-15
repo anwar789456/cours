@@ -10,4 +10,5 @@ public interface IQuizAttemptService {
     QuizAttempt completeAttempt(Long attemptId);
     List<QuizAttempt> getUserAttempts(Long userId);
     QuizAttempt getAttempt(Long attemptId);
+    void sendResultsEmail(Long attemptId, String userEmail, String userName);
 }

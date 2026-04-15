@@ -153,16 +153,20 @@ public class AvatarChatService {
 
         sb.append("You are a fun English tutor for kids. ");
         sb.append("RULES: Reply in 1-3 short sentences only. ");
-        sb.append("Be cheerful and simple. If asked about a course or quiz, recommend one from the list below.\n\n");
+        sb.append("Be cheerful and simple. ");
+        sb.append("When recommending a course, you MUST write it as 'Course #N' (where N is the numeric ID from the list). ");
+        sb.append("When recommending a quiz, you MUST write it as 'Quiz #N' (where N is the numeric ID from the list). ");
+        sb.append("Example: \"Try Quiz #3 — it's great!\" or \"Check out Course #5!\".\n\n");
 
         List<Cours> courses = coursRepository.findAll();
         List<Cours> activeCourses = courses.stream()
                 .filter(c -> !c.isArchived()).collect(Collectors.toList());
 
         if (!activeCourses.isEmpty()) {
-            sb.append("AVAILABLE COURSES:\n");
+            sb.append("AVAILABLE COURSES (always mention the ID number when recommending one):\n");
             activeCourses.stream().limit(12).forEach(c -> {
-                sb.append("- \"").append(c.getTitle()).append("\"");
+                sb.append("- Course #").append(c.getId())
+                        .append(": \"").append(c.getTitle()).append("\"");
                 if (c.getDescription() != null && !c.getDescription().isBlank()) {
                     String d = c.getDescription();
                     sb.append(" (").append(d.length() > 70 ? d.substring(0, 70) + "..." : d).append(")");
@@ -191,8 +195,9 @@ public class AvatarChatService {
         List<Quiz> openQuizzes = quizRepository.findAll().stream()
                 .filter(q -> !q.isArchived()).limit(8).collect(Collectors.toList());
         if (!openQuizzes.isEmpty()) {
-            sb.append("AVAILABLE QUIZZES:\n");
-            openQuizzes.forEach(q -> sb.append("- \"").append(q.getTitle())
+            sb.append("AVAILABLE QUIZZES (always mention the ID number when recommending one):\n");
+            openQuizzes.forEach(q -> sb.append("- Quiz #").append(q.getId())
+                    .append(": \"").append(q.getTitle())
                     .append("\" (").append(q.getLevel()).append(")\n"));
             sb.append("\n");
         }
@@ -232,16 +237,86 @@ public class AvatarChatService {
     // ── Suggestion extraction ─────────────────────────────────────────────────
     List<Suggestion> extractSuggestions(String reply, String currentPage) {
         List<Suggestion> list = new ArrayList<>();
-        String l = reply.toLowerCase();
-        String p = currentPage == null ? "" : currentPage;
-        if ((l.contains("course") || l.contains("lesson") || l.contains("learn")) && !p.contains("/courses"))
-            list.add(new Suggestion("Browse Courses", "/courses"));
-        if ((l.contains("quiz") || l.contains("test") || l.contains("practice")) && !p.contains("/quiz"))
-            list.add(new Suggestion("Take a Quiz", "/quiz"));
-        if ((l.contains("session") || l.contains("tutor") || l.contains("teacher")) && !p.contains("/sessions"))
-            list.add(new Suggestion("Book a Session", "/sessions"));
-        if ((l.contains("forum") || l.contains("discuss")) && !p.contains("/forums"))
-            list.add(new Suggestion("Visit Forums", "/forums"));
+        Set<String> seen = new HashSet<>();
+
+        if (reply == null) reply = "";
+        String lower = reply.toLowerCase();
+
+        List<Quiz> activeQuizzes = quizRepository.findAll().stream()
+                .filter(q -> !q.isArchived() && q.getTitle() != null)
+                .collect(Collectors.toList());
+        List<Cours> activeCourses = coursRepository.findAll().stream()
+                .filter(c -> !c.isArchived() && c.getTitle() != null)
+                .collect(Collectors.toList());
+
+        // 1. Extract explicit quiz IDs from AI reply — e.g. "Quiz #5" or "quiz 5"
+        java.util.regex.Matcher quizMatcher = java.util.regex.Pattern
+                .compile("\\bquiz\\s*#?(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(reply);
+        while (quizMatcher.find() && list.size() < 3) {
+            String id = quizMatcher.group(1);
+            Quiz q = activeQuizzes.stream()
+                    .filter(x -> String.valueOf(x.getId()).equals(id))
+                    .findFirst().orElse(null);
+            if (q == null) continue;
+            String route = "/quiz/" + id + "/play";
+            if (seen.add(route)) {
+                list.add(new Suggestion("▶ " + q.getTitle(), route));
+            }
+        }
+
+        // 2. Extract explicit course IDs — e.g. "course #3" or "Course 3"
+        java.util.regex.Matcher courseMatcher = java.util.regex.Pattern
+                .compile("\\bcourse[s]?\\s*#?(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(reply);
+        while (courseMatcher.find() && list.size() < 3) {
+            String id = courseMatcher.group(1);
+            Cours c = activeCourses.stream()
+                    .filter(x -> String.valueOf(x.getId()).equals(id))
+                    .findFirst().orElse(null);
+            if (c == null) continue;
+            String route = "/courses?open=" + id;
+            if (seen.add(route)) {
+                list.add(new Suggestion("📖 " + c.getTitle(), route));
+            }
+        }
+
+        // 3. Title-match fallback: AI mentioned an item by name but not by ID
+        if (list.size() < 3) {
+            for (Quiz q : activeQuizzes) {
+                if (list.size() >= 3) break;
+                if (lower.contains(q.getTitle().toLowerCase())) {
+                    String route = "/quiz/" + q.getId() + "/play";
+                    if (seen.add(route)) list.add(new Suggestion("▶ " + q.getTitle(), route));
+                }
+            }
+            for (Cours c : activeCourses) {
+                if (list.size() >= 3) break;
+                if (lower.contains(c.getTitle().toLowerCase())) {
+                    String route = "/courses?open=" + c.getId();
+                    if (seen.add(route)) list.add(new Suggestion("📖 " + c.getTitle(), route));
+                }
+            }
+        }
+
+        // 4. Topic-based fallback: AI mentioned the TOPIC but no specific item — pick one
+        if (list.isEmpty()) {
+            boolean mentionsQuiz = lower.contains("quiz") || lower.contains("test") || lower.contains("practice");
+            boolean mentionsCourse = lower.contains("course") || lower.contains("lesson") || lower.contains("learn");
+
+            if (mentionsQuiz && !activeQuizzes.isEmpty()) {
+                Quiz q = activeQuizzes.get(0);
+                list.add(new Suggestion("▶ " + q.getTitle(), "/quiz/" + q.getId() + "/play"));
+            }
+            if (mentionsCourse && !activeCourses.isEmpty() && list.size() < 3) {
+                Cours c = activeCourses.get(0);
+                list.add(new Suggestion("📖 " + c.getTitle(), "/courses?open=" + c.getId()));
+            }
+            if (lower.contains("forum") || lower.contains("discuss")) {
+                list.add(new Suggestion("Visit Forums", "/forums"));
+            }
+        }
+
         return list.size() > 3 ? list.subList(0, 3) : list;
     }
 }

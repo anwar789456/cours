@@ -45,4 +45,13 @@ public class QuizAttemptController {
     public ResponseEntity<QuizAttempt> getAttempt(@PathVariable Long attemptId) {
         return ResponseEntity.ok(quizAttemptService.getAttempt(attemptId));
     }
+
+    @PostMapping("/{attemptId}/send-results")
+    public ResponseEntity<Void> sendResults(@PathVariable Long attemptId,
+            @RequestBody Map<String, String> body) {
+        String userEmail = body.get("userEmail");
+        String userName = body.get("userName");
+        quizAttemptService.sendResultsEmail(attemptId, userEmail, userName);
+        return ResponseEntity.ok().build();
+    }
 }
