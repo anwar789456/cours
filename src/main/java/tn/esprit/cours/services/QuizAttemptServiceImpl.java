@@ -178,7 +178,7 @@ public class QuizAttemptServiceImpl implements IQuizAttemptService {
                 </tr>
                 """,
                 rowBg,
-                escapeHtml(q.getQuestionText() != null ? q.getQuestionText() : ""),
+                escapeHtml(q.getQuestion() != null ? q.getQuestion() : ""),
                 escapeHtml(submitted),
                 correct ? "" : "<span style='color:#dc2626'>(incorrect)</span>",
                 escapeHtml(q.getCorrectAnswer() != null ? q.getCorrectAnswer() : ""),
