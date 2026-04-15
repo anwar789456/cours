@@ -216,6 +216,60 @@ public class AiService {
         return "[]";
     }
 
+    public String generateWritingPrompt(String title, String difficulty, String type, String hints) {
+        if (title == null || title.isBlank()) return "{}";
+
+        String diff = (difficulty != null && !difficulty.isBlank()) ? difficulty : "BEGINNER";
+        String writingType = (type != null && !type.isBlank()) ? type : "creative writing";
+        String hintsInfo = (hints != null && !hints.isBlank()) ? "\nAdditional hints: " + hints : "";
+
+        // Word range based on difficulty
+        String wordRange = switch (diff.toUpperCase()) {
+            case "INTERMEDIATE" -> "80-200";
+            case "ADVANCED"     -> "150-300";
+            default             -> "40-120";
+        };
+
+        String prompt = "Generate a writing prompt for kids learning English.\n"
+                + "Title: \"" + title + "\" | Type: " + writingType + " | Level: " + diff + hintsInfo + "\n"
+                + "Return ONLY this JSON (no markdown, no extra text):\n"
+                + "{\"description\":\"Clear, engaging 2-3 sentence writing instruction for students\","
+                + "\"minWords\":" + wordRange.split("-")[0] + ","
+                + "\"maxWords\":" + wordRange.split("-")[1] + "}\n"
+                + "description must be a fun, clear instruction telling students exactly what to write. Start with { end with }.";
+
+        Map<String, Object> body = Map.of(
+                "model", model,
+                "prompt", prompt,
+                "max_tokens", 400
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map> responseEntity =
+                    restTemplate.exchange(apiUrl, HttpMethod.POST, request, Map.class);
+            Map<String, Object> response = responseEntity.getBody();
+            if (response != null && response.containsKey("choices")) {
+                Object choicesObj = response.get("choices");
+                if (choicesObj instanceof Iterable<?> choices) {
+                    for (Object choice : choices) {
+                        if (choice instanceof Map<?, ?> choiceMap && choiceMap.containsKey("text")) {
+                            String raw = choiceMap.get("text").toString().trim();
+                            return repairJson(raw);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "{}";
+        }
+        return "{}";
+    }
+
     public String generateFullStoryQuiz(String title, String difficulty) {
         if (title == null || title.isBlank()) return "{}";
 
