@@ -59,6 +59,14 @@ pipeline {
                 sh 'docker build -t cours-backend:latest .'
             }
         }
+
+        stage('Deploy') {
+            steps {
+                sh 'docker stop cours-backend-app || true'
+                sh 'docker rm cours-backend-app || true'
+                sh 'docker run -d --name cours-backend-app --network devops-net -p 8090:8090 cours-backend:latest'
+            }
+        }
     }
 
     post {
