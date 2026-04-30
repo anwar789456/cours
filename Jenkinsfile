@@ -3,6 +3,8 @@ pipeline {
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        IMAGE_NAME = 'medanwarsalhi/cours-backend'
     }
 
     tools {
@@ -56,7 +58,14 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t cours-backend:latest .'
+                sh 'docker build -t ${IMAGE_NAME}:latest .'
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                sh 'docker push ${IMAGE_NAME}:latest'
             }
         }
 
@@ -64,7 +73,7 @@ pipeline {
             steps {
                 sh 'docker stop cours-backend-app || true'
                 sh 'docker rm cours-backend-app || true'
-                sh 'docker run -d --name cours-backend-app --network devops-net -p 8090:8090 cours-backend:latest'
+                sh 'docker run -d --name cours-backend-app --network devops-net -p 8090:8090 ${IMAGE_NAME}:latest'
             }
         }
     }
