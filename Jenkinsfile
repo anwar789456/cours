@@ -73,7 +73,17 @@ pipeline {
             steps {
                 sh 'docker stop cours-backend-app || true'
                 sh 'docker rm cours-backend-app || true'
-                sh 'docker run -d --name cours-backend-app --network devops-net -p 8090:8090 ${IMAGE_NAME}:latest'
+                sh """docker run -d \
+                    --name cours-backend-app \
+                    --network devops-net \
+                    -p 8090:8090 \
+                    -e SPRING_DATASOURCE_URL=jdbc:postgresql://51.255.203.187:5432/cours \
+                    -e SPRING_DATASOURCE_USERNAME=anwar \
+                    -e SPRING_DATASOURCE_PASSWORD=anwar123 \
+                    -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
+                    -e EUREKA_CLIENT_REGISTER_WITH_EUREKA=false \
+                    -e EUREKA_CLIENT_FETCH_REGISTRY=false \
+                    ${IMAGE_NAME}:latest"""
             }
         }
     }
