@@ -146,11 +146,13 @@ public class AvatarChatService {
     // ── Streaming (used by dedicated tutor page) ─────────────────────────────
     public Flux<String> streamChat(AvatarChatRequest request) {
         String prompt = buildPrompt(request);
+        if (prompt.length() > 2000) prompt = prompt.substring(0, 2000);
 
         Map<String, Object> body = new HashMap<>();
         body.put("model", model);
         body.put("prompt", prompt);
         body.put("max_tokens", 120);
+        body.put("num_ctx", 2048);
         body.put("stream", true);
 
         return webClient.post()
@@ -259,12 +261,12 @@ public class AvatarChatService {
 
         if (!activeCourses.isEmpty()) {
             sb.append("AVAILABLE COURSES:\n");
-            activeCourses.stream().limit(12).forEach(c -> {
+            activeCourses.stream().limit(6).forEach(c -> {
                 sb.append("- Course #").append(c.getId())
                         .append(": \"").append(c.getTitle()).append("\"");
                 if (c.getDescription() != null && !c.getDescription().isBlank()) {
                     String d = c.getDescription();
-                    sb.append(" (").append(d.length() > 70 ? d.substring(0, 70) + "..." : d).append(")");
+                    sb.append(" (").append(d.length() > 40 ? d.substring(0, 40) + "..." : d).append(")");
                 }
                 sb.append("\n");
             });
@@ -290,7 +292,7 @@ public class AvatarChatService {
 
         // ── Quizzes ──
         List<Quiz> openQuizzes = quizRepository.findAll().stream()
-                .filter(q -> !q.isArchived()).limit(8).collect(Collectors.toList());
+                .filter(q -> !q.isArchived()).limit(4).collect(Collectors.toList());
         if (!openQuizzes.isEmpty()) {
             sb.append("AVAILABLE QUIZZES:\n");
             openQuizzes.forEach(q -> sb.append("- Quiz #").append(q.getId())
@@ -303,7 +305,7 @@ public class AvatarChatService {
         List<Map<String, Object>> events = fetchEvents();
         List<Map<String, Object>> upcomingEvents = events.stream()
                 .filter(e -> "UPCOMING".equals(e.get("status")) || "ONGOING".equals(e.get("status")))
-                .limit(8).collect(Collectors.toList());
+                .limit(3).collect(Collectors.toList());
         if (!upcomingEvents.isEmpty()) {
             sb.append("UPCOMING EVENTS:\n");
             upcomingEvents.forEach(e -> {
@@ -395,7 +397,8 @@ public class AvatarChatService {
 
     // ── Non-streaming Ollama call (for floating widget) ───────────────────────
     private String callOllama(String prompt) {
-        Map<String, Object> body = Map.of("model", model, "prompt", prompt, "max_tokens", 300);
+        if (prompt.length() > 2000) prompt = prompt.substring(0, 2000);
+        Map<String, Object> body = Map.of("model", model, "prompt", prompt, "max_tokens", 120, "num_ctx", 2048);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         try {
