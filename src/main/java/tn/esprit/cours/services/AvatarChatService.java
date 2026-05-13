@@ -31,7 +31,7 @@ public class AvatarChatService {
     private final CourseProgressRepository courseProgressRepository;
     private final QuizRepository quizRepository;
 
-    private final String ollamaUrl = "https://minolingo.online/ollama/v1/completions";
+    private final String ollamaUrl = "http://localhost:11434/v1/completions";
 
     @Value("${avatar.ai.model:qwen2.5:3b}")
     private String model;
